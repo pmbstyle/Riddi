@@ -148,17 +148,15 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
       break;
     case 'tts-chunk-playing':
       if (activeRequestId && message.requestId === activeRequestId) {
-        console.info('Chunk now playing:', message.chunkIndex, '- sending highlight to content');
-        // Update playback state and send highlight to content
         updatePlaybackState({
           status: 'playing',
           currentChunk: message.chunkIndex
         });
-        // Broadcast highlight to content script
         broadcastToContent({
           type: 'highlight-chunk',
           chunkIndex: message.chunkIndex,
-          chunkText: message.chunkText
+          chunkText: message.chunkText,
+          durationMs: message.durationMs
         }).catch(err => console.warn('Failed to broadcast highlight:', err));
       }
       break;
@@ -175,7 +173,8 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
         broadcastToContent({
           type: 'highlight-chunk',
           chunkIndex: -1,  // -1 signals clear highlights
-          chunkText: ''
+          chunkText: '',
+          durationMs: 0
         }).catch(() => {});
       }
       break;

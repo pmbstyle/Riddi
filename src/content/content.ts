@@ -1,5 +1,5 @@
 import { Readability } from '@mozilla/readability';
-import { highlightChunk, resetHighlightTracking, HIGHLIGHT_CLASS, setArticleElements as setHighlightElements } from './highlight';
+import { highlightChunk, resetHighlightTracking, pauseWordAnimation, HIGHLIGHT_CLASS, setArticleElements as setHighlightElements } from './highlight';
 import type { BackgroundToContentMessage, ContentToBackgroundMessage } from '@shared/messages';
 import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
 
@@ -331,24 +331,21 @@ function handlePlayPauseClick(): void {
 }
 
 function handleRuntimeMessage(message: BackgroundToContentMessage): void {
-  console.log('[Riddi] Content received message:', message.type);
   switch (message.type) {
     case 'playback-state':
       playbackState = message.state;
       updateWidgetState();
-      // Clear highlights when idle
       if (playbackState.status === 'idle') {
         resetHighlightTracking();
+      } else if (playbackState.status === 'paused') {
+        pauseWordAnimation();
       }
       break;
     case 'highlight-chunk':
-      // Highlight the chunk text on the actual page using chunk index
-      console.log('[Riddi] Received highlight-chunk:', message.chunkIndex, 'text:', message.chunkText.substring(0, 30));
       if (message.chunkIndex < 0) {
-        // Negative index means clear all highlights
         resetHighlightTracking();
       } else {
-        highlightChunk(message.chunkIndex, message.chunkText, settings.speed);
+        highlightChunk(message.chunkIndex, message.chunkText, message.durationMs);
       }
       break;
     default:
@@ -377,6 +374,7 @@ function updateWidgetState(): void {
   if (status === 'playing') {
     playBtn.style.display = 'none';
     pauseBtn.style.display = 'flex';
+    playBtn.disabled = false;
   } else {
     playBtn.style.display = 'flex';
     pauseBtn.style.display = 'none';
@@ -385,6 +383,7 @@ function updateWidgetState(): void {
     if (status === 'paused') {
       playBtn.innerHTML = '▶';
       playBtn.title = 'Resume';
+      playBtn.disabled = false;
     } else if (status === 'loading') {
       playBtn.innerHTML = '⏳';
       playBtn.title = 'Loading...';

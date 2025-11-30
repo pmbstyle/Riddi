@@ -206,12 +206,13 @@ async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
         bufferRemaining: buffer.length 
       });
 
-      // Send highlight BEFORE playing
+      // Send highlight BEFORE playing (include duration for accurate word timing)
       await notifyBackground({
         type: 'tts-chunk-playing',
         requestId: request.requestId,
         chunkIndex: chunk.index,
-        chunkText: chunk.text
+        chunkText: chunk.text,
+        durationMs: Math.round(chunk.duration * 1000)
       });
 
       // Determine how many chunks to synthesize based on current chunk duration

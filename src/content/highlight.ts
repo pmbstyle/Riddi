@@ -22,7 +22,7 @@ export function setArticleElements(blocks: TextBlock[], _fullContent?: string): 
   currentChunkIndex = -1;
 }
 
-export function highlightChunk(chunkIndex: number, chunkText: string, speed: number): void {
+export function highlightChunk(chunkIndex: number, chunkText: string, durationMs: number): void {
   clearPageHighlights();
   
   if (!chunkText?.trim()) return;
@@ -36,15 +36,15 @@ export function highlightChunk(chunkIndex: number, chunkText: string, speed: num
     
     if (currentWords.length === 0) {
       clearPageHighlights();
-      fallbackHighlight(chunkText, speed);
+      fallbackHighlight(chunkText, durationMs);
       return;
     }
     
     const startWordIndex = findChunkStartWordIndex(chunkText);
-    startWordAnimation(speed, startWordIndex);
+    startWordAnimation(durationMs, startWordIndex);
     matchingBlock.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
   } else {
-    fallbackHighlight(chunkText, speed);
+    fallbackHighlight(chunkText, durationMs);
   }
 }
 
@@ -132,8 +132,8 @@ function findBestMatchingBlock(chunkText: string): TextBlock | null {
   return bestBlock && bestScore >= 50 ? bestBlock : null;
 }
 
-export function highlightChunkByIndex(chunkText: string, speed: number): void {
-  highlightChunk(currentChunkIndex + 1, chunkText, speed);
+export function highlightChunkByIndex(chunkText: string, durationMs: number): void {
+  highlightChunk(currentChunkIndex + 1, chunkText, durationMs);
 }
 
 function normalizeText(text: string): string {
@@ -214,14 +214,21 @@ function wrapWordsInElement(container: HTMLElement): void {
   }
 }
 
-function startWordAnimation(speed: number, startIndex = 0): void {
+function startWordAnimation(durationMs: number, startIndex = 0): void {
   if (wordHighlightTimeout) clearTimeout(wordHighlightTimeout);
   
   currentWordIndex = startIndex;
   
-  const baseMsPerWord = 380;
-  const msPerWord = Math.round(baseMsPerWord / speed);
-  const sentenceEndPause = Math.round(400 / speed);
+  // Calculate words remaining from startIndex
+  const wordsToAnimate = currentWords.length - startIndex;
+  if (wordsToAnimate <= 0) return;
+  
+  // Calculate ms per word from actual audio duration
+  // Use a minimum of 100ms to avoid too-fast animation
+  const msPerWord = Math.max(100, Math.round(durationMs / wordsToAnimate));
+  
+  // Extra pause after sentence-ending punctuation (10% of word time)
+  const sentenceEndPause = Math.round(msPerWord * 0.25);
   
   highlightCurrentWord();
   
@@ -255,7 +262,7 @@ function highlightCurrentWord(): void {
   });
 }
 
-function fallbackHighlight(chunkText: string, speed: number): void {
+function fallbackHighlight(chunkText: string, durationMs: number): void {
   const normalizedChunk = normalizeText(chunkText);
   const chunkLength = normalizedChunk.length;
   
@@ -299,7 +306,7 @@ function fallbackHighlight(chunkText: string, speed: number): void {
     highlightElement(el);
     wrapWordsInElement(el);
     if (currentWords.length > 0) {
-      startWordAnimation(speed, findChunkStartWordIndex(chunkText));
+      startWordAnimation(durationMs, findChunkStartWordIndex(chunkText));
     }
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
@@ -316,7 +323,7 @@ function fallbackHighlight(chunkText: string, speed: number): void {
     highlightElement(el);
     wrapWordsInElement(el);
     if (currentWords.length > 0) {
-      startWordAnimation(speed, findChunkStartWordIndex(chunkText));
+      startWordAnimation(durationMs, findChunkStartWordIndex(chunkText));
     }
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
@@ -354,11 +361,18 @@ function fallbackHighlight(chunkText: string, speed: number): void {
       highlightElement(target);
       wrapWordsInElement(target);
       if (currentWords.length > 0) {
-        startWordAnimation(speed);
+        startWordAnimation(durationMs);
       }
       target.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
+  }
+}
+
+export function pauseWordAnimation(): void {
+  if (wordHighlightTimeout) {
+    clearTimeout(wordHighlightTimeout);
+    wordHighlightTimeout = null;
   }
 }
 
