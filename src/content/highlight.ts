@@ -41,7 +41,8 @@ export function highlightChunk(chunkIndex: number, chunkText: string, durationMs
     }
     
     const startWordIndex = findChunkStartWordIndex(chunkText);
-    startWordAnimation(durationMs, startWordIndex);
+    const chunkWordCount = countWords(chunkText);
+    startWordAnimation(durationMs, chunkWordCount, startWordIndex);
     matchingBlock.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
   } else {
     fallbackHighlight(chunkText, durationMs);
@@ -140,6 +141,10 @@ function normalizeText(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+}
+
 function highlightElement(element: HTMLElement): void {
   if (!originalHTMLMap.has(element)) {
     originalHTMLMap.set(element, element.innerHTML);
@@ -214,20 +219,18 @@ function wrapWordsInElement(container: HTMLElement): void {
   }
 }
 
-function startWordAnimation(durationMs: number, startIndex = 0): void {
+function startWordAnimation(durationMs: number, chunkWordCount: number, startIndex = 0): void {
   if (wordHighlightTimeout) clearTimeout(wordHighlightTimeout);
   
   currentWordIndex = startIndex;
   
-  // Calculate words remaining from startIndex
-  const wordsToAnimate = currentWords.length - startIndex;
-  if (wordsToAnimate <= 0) return;
+  if (chunkWordCount <= 0) return;
   
-  // Calculate ms per word from actual audio duration
+  // Calculate ms per word from actual audio duration and chunk word count
   // Use a minimum of 100ms to avoid too-fast animation
-  const msPerWord = Math.max(100, Math.round(durationMs / wordsToAnimate));
+  const msPerWord = Math.max(100, Math.round(durationMs / chunkWordCount));
   
-  // Extra pause after sentence-ending punctuation (10% of word time)
+  // Extra pause after sentence-ending punctuation (25% of word time)
   const sentenceEndPause = Math.round(msPerWord * 0.25);
   
   highlightCurrentWord();
@@ -306,7 +309,8 @@ function fallbackHighlight(chunkText: string, durationMs: number): void {
     highlightElement(el);
     wrapWordsInElement(el);
     if (currentWords.length > 0) {
-      startWordAnimation(durationMs, findChunkStartWordIndex(chunkText));
+      const chunkWordCount = countWords(chunkText);
+      startWordAnimation(durationMs, chunkWordCount, findChunkStartWordIndex(chunkText));
     }
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
@@ -323,7 +327,8 @@ function fallbackHighlight(chunkText: string, durationMs: number): void {
     highlightElement(el);
     wrapWordsInElement(el);
     if (currentWords.length > 0) {
-      startWordAnimation(durationMs, findChunkStartWordIndex(chunkText));
+      const chunkWordCount = countWords(chunkText);
+      startWordAnimation(durationMs, chunkWordCount, findChunkStartWordIndex(chunkText));
     }
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
@@ -361,7 +366,8 @@ function fallbackHighlight(chunkText: string, durationMs: number): void {
       highlightElement(target);
       wrapWordsInElement(target);
       if (currentWords.length > 0) {
-        startWordAnimation(durationMs);
+        const chunkWordCount = countWords(chunkText);
+        startWordAnimation(durationMs, chunkWordCount);
       }
       target.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
