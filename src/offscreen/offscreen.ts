@@ -105,10 +105,10 @@ async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
     }
 
     // Buffer for pre-synthesized chunks
-    // Dynamic sizing: short chunks need more buffer to avoid gaps
-    const MIN_BUFFER_SIZE = 2;
-    const MAX_BUFFER_SIZE = 4;
-    const SHORT_CHUNK_THRESHOLD = 3; // seconds - chunks shorter than this need more buffer
+    // Dynamic sizing based on chunk content
+    const SHORT_TEXT_THRESHOLD = 100; // characters - chunks shorter than this are likely headings
+    const LONG_TEXT_THRESHOLD = 200;  // characters - chunks longer than this produce enough audio
+    const SHORT_DURATION_THRESHOLD = 3; // seconds - need more buffer for short audio chunks
     
     const buffer: Array<{ wav: number[]; duration: number; text: string; index: number }> = [];
     let nextToSynthesize = 0;
@@ -120,27 +120,6 @@ async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
         type: 'tts-progress',
         progress: { requestId: request.requestId, step, totalSteps: total }
       }).catch(() => {});
-    };
-
-    // Calculate target buffer size based on upcoming chunks
-    const getTargetBufferSize = (): number => {
-      // Check the duration of buffered chunks
-      const avgBufferedDuration = buffer.length > 0
-        ? buffer.reduce((sum, c) => sum + c.duration, 0) / buffer.length
-        : 0;
-      
-      // Check upcoming chunk lengths (short text = likely short audio)
-      let shortChunksAhead = 0;
-      for (let i = nextToSynthesize; i < Math.min(nextToSynthesize + 3, totalChunks); i++) {
-        if (textChunks[i].length < 100) shortChunksAhead++; // Short text chunks (headings)
-      }
-      
-      // If we have short chunks coming or buffer has short durations, increase buffer
-      if (shortChunksAhead >= 2 || avgBufferedDuration < SHORT_CHUNK_THRESHOLD) {
-        return MAX_BUFFER_SIZE;
-      }
-      
-      return MIN_BUFFER_SIZE;
     };
 
     // Helper to synthesize one chunk and add to buffer
@@ -169,10 +148,39 @@ async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
       return true;
     };
 
-    // Pre-fill buffer - start with MIN_BUFFER_SIZE, may grow dynamically
-    const initialBufferSize = Math.min(MIN_BUFFER_SIZE, totalChunks);
-    await debug('pre-filling-buffer', { targetSize: initialBufferSize });
-    for (let i = 0; i < initialBufferSize; i++) {
+    // Calculate how many chunks to buffer during playback
+    const getTargetBufferSize = (): number => {
+      const avgBufferedDuration = buffer.length > 0
+        ? buffer.reduce((sum, c) => sum + c.duration, 0) / buffer.length
+        : 0;
+      
+      // Check upcoming chunk lengths
+      let shortChunksAhead = 0;
+      for (let i = nextToSynthesize; i < Math.min(nextToSynthesize + 3, totalChunks); i++) {
+        if (textChunks[i].length < SHORT_TEXT_THRESHOLD) shortChunksAhead++;
+      }
+      
+      // Need more buffer for short chunks or short durations
+      if (shortChunksAhead >= 2 || avgBufferedDuration < SHORT_DURATION_THRESHOLD) {
+        return 4;
+      }
+      return 2;
+    };
+
+    // Dynamic initial buffer size based on first chunk's content
+    // Long first chunk = start playing after just 1 chunk (faster time-to-audio)
+    // Short first chunk = buffer 2 chunks to avoid gaps
+    const firstChunkLength = textChunks[0].length;
+    const initialBufferSize = firstChunkLength >= LONG_TEXT_THRESHOLD ? 1 : 2;
+    const actualInitialSize = Math.min(initialBufferSize, totalChunks);
+    
+    await debug('pre-filling-buffer', { 
+      targetSize: actualInitialSize, 
+      firstChunkLength,
+      reason: firstChunkLength >= LONG_TEXT_THRESHOLD ? 'long-chunk-fast-start' : 'short-chunk-needs-buffer'
+    });
+    
+    for (let i = 0; i < actualInitialSize; i++) {
       const success = await synthesizeNext();
       if (!success) break;
     }
