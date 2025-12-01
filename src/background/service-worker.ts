@@ -13,7 +13,9 @@ let offscreenReady = false;
 let offscreenReadyResolver: (() => void) | null = null;
 let offscreenReadyPromise: Promise<void> | null = null;
 
-let lastArticle: ArticleContent | null = null;
+// Track articles per tab
+const tabArticles = new Map<number, ArticleContent>();
+
 let playbackState: PlaybackState = {
   status: 'idle',
   currentChunk: 0,
@@ -22,14 +24,24 @@ let playbackState: PlaybackState = {
   durationSeconds: 0
 };
 let activeRequestId: string | null = null;
+let activeTabId: number | null = null;
 
 chrome.runtime.onInstalled.addListener(() => {
   console.info('[Riddi] Extension installed');
 });
 
-chrome.runtime.onMessage.addListener((message: ContentToBackgroundMessage | OffscreenToBackgroundMessage | PopupToBackgroundMessage, _sender, sendResponse) => {
+// Clean up when tabs are closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabArticles.delete(tabId);
+  if (activeTabId === tabId) {
+    activeTabId = null;
+  }
+});
+
+chrome.runtime.onMessage.addListener((message: ContentToBackgroundMessage | OffscreenToBackgroundMessage | PopupToBackgroundMessage, sender, sendResponse) => {
   if (isContentMessage(message)) {
-    void handleContentMessage(message);
+    const tabId = sender.tab?.id;
+    void handleContentMessage(message, tabId);
     sendResponse({ ok: true });
     return true;
   }
@@ -73,13 +85,31 @@ async function ensureOffscreenReady(): Promise<void> {
   await offscreenReadyPromise;
 }
 
+async function getActiveTabArticle(): Promise<{ article: ArticleContent; tabId: number } | null> {
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab?.id) {
+      const article = tabArticles.get(activeTab.id);
+      if (article) {
+        return { article, tabId: activeTab.id };
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+  return null;
+}
+
 async function handlePopupMessage(message: PopupToBackgroundMessage, sendResponse: (response: unknown) => void): Promise<void> {
   switch (message.type) {
-    case 'get-playback-state':
-      sendResponse({ state: playbackState, hasArticle: !!lastArticle });
+    case 'get-playback-state': {
+      const result = await getActiveTabArticle();
+      sendResponse({ state: playbackState, hasArticle: !!result?.article });
       return;
-    case 'popup-start-tts':
-      if (lastArticle) {
+    }
+    case 'popup-start-tts': {
+      const result = await getActiveTabArticle();
+      if (result) {
         const saved = await chrome.storage.sync.get(['ttsSettings']);
         const settings: TTSSettings = saved?.ttsSettings ?? {
           voice: 'M1',
@@ -91,6 +121,7 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
         await ensureOffscreenReady();
         const requestId = crypto.randomUUID();
         activeRequestId = requestId;
+        activeTabId = result.tabId;
         updatePlaybackState({
           status: 'loading',
           currentChunk: 0,
@@ -101,11 +132,12 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
         });
         await postToOffscreen({
           type: 'synthesize',
-          payload: { requestId, text: lastArticle.content, settings }
+          payload: { requestId, text: result.article.content, settings }
         });
       }
       sendResponse({ ok: true });
       return;
+    }
     case 'popup-pause-tts':
       await postToOffscreen({ type: 'pause' });
       updatePlaybackState({ status: 'paused' });
@@ -119,6 +151,7 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
     case 'popup-stop-tts':
       await postToOffscreen({ type: 'stop' });
       activeRequestId = null;
+      activeTabId = null;
       updatePlaybackState({ status: 'idle', positionSeconds: 0, durationSeconds: 0 });
       sendResponse({ ok: true });
       return;
@@ -127,14 +160,17 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
   }
 }
 
-async function handleContentMessage(message: ContentToBackgroundMessage): Promise<void> {
+async function handleContentMessage(message: ContentToBackgroundMessage, tabId?: number): Promise<void> {
   switch (message.type) {
     case 'content-ready':
-      lastArticle = message.article;
+      if (tabId) {
+        tabArticles.set(tabId, message.article);
+      }
       break;
     case 'start-tts':
       await ensureOffscreenReady();
       activeRequestId = message.payload.requestId;
+      activeTabId = tabId ?? null;
       updatePlaybackState({
         status: 'loading',
         currentChunk: 0,
@@ -156,6 +192,7 @@ async function handleContentMessage(message: ContentToBackgroundMessage): Promis
     case 'stop-tts':
       await postToOffscreen({ type: 'stop' });
       activeRequestId = null;
+      activeTabId = null;
       updatePlaybackState({ status: 'idle', positionSeconds: 0, durationSeconds: 0 });
       break;
   }
@@ -199,28 +236,35 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
           status: 'playing',
           currentChunk: message.chunkIndex
         });
-        broadcastToContent({
-          type: 'highlight-chunk',
-          chunkIndex: message.chunkIndex,
-          chunkText: message.chunkText,
-          durationMs: message.durationMs
-        }).catch(() => {});
+        // Only send highlight to the active tab
+        if (activeTabId) {
+          sendToTab(activeTabId, {
+            type: 'highlight-chunk',
+            chunkIndex: message.chunkIndex,
+            chunkText: message.chunkText,
+            durationMs: message.durationMs
+          });
+        }
       }
       break;
     case 'tts-complete':
       if (activeRequestId && message.requestId === activeRequestId) {
+        // Send final highlight clear to active tab
+        if (activeTabId) {
+          sendToTab(activeTabId, {
+            type: 'highlight-chunk',
+            chunkIndex: -1,
+            chunkText: '',
+            durationMs: 0
+          });
+        }
         activeRequestId = null;
+        activeTabId = null;
         updatePlaybackState({
           status: 'idle',
           positionSeconds: 0,
           durationSeconds: message.totalDuration
         });
-        broadcastToContent({
-          type: 'highlight-chunk',
-          chunkIndex: -1,
-          chunkText: '',
-          durationMs: 0
-        }).catch(() => {});
       }
       break;
     case 'tts-error':
@@ -232,6 +276,7 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
 
 function updatePlaybackState(partial: Partial<PlaybackState>): void {
   playbackState = { ...playbackState, ...partial };
+  // Broadcast state to all tabs so popup can get updated state
   void broadcastToContent({ type: 'playback-state', state: playbackState });
 }
 
@@ -248,6 +293,10 @@ async function postToOffscreen(message: BackgroundToOffscreenMessage): Promise<v
   }
 }
 
+function sendToTab(tabId: number, message: BackgroundToContentMessage): void {
+  chrome.tabs.sendMessage(tabId, message).catch(() => {});
+}
+
 async function broadcastToContent(message: BackgroundToContentMessage): Promise<void> {
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   for (const tab of tabs) {
@@ -258,7 +307,10 @@ async function broadcastToContent(message: BackgroundToContentMessage): Promise<
 
 chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'get-last-article') {
-    sendResponse({ article: lastArticle });
+    // Return article from active tab
+    getActiveTabArticle().then(result => {
+      sendResponse({ article: result?.article ?? null });
+    });
     return true;
   }
   return false;
