@@ -4,8 +4,6 @@ import type { BackgroundToContentMessage, ContentToBackgroundMessage } from '@sh
 import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
 
 const WIDGET_ID = 'riddi-widget';
-const SHORTCUT_PLAY_PAUSE = { altKey: true, shiftKey: true, key: 'P' }; // Alt+Shift+P
-const SHORTCUT_STOP = { altKey: true, shiftKey: true, key: 'S' }; // Alt+Shift+S
 
 let settings: TTSSettings = {
   voice: 'M1',
@@ -19,36 +17,31 @@ let playbackState: PlaybackState | null = null;
 let widgetRoot: HTMLDivElement | null = null;
 let isWidgetExpanded = false;
 
-// Widget button references for reactive updates
 let mainBtn: HTMLButtonElement | null = null;
 let playBtn: HTMLButtonElement | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
 let stopBtn: HTMLButtonElement | null = null;
 let controlsPanel: HTMLDivElement | null = null;
 
-// Track text blocks with their DOM elements for reliable highlighting
 interface TextBlock {
   text: string;
   element: HTMLElement;
-  startOffset: number; // character offset in full content
+  startOffset: number;
 }
 let textBlocks: TextBlock[] = [];
 
-init().catch((error) => console.error('Failed to initialize content script', error));
+init().catch((error) => console.error('[Riddi] Failed to initialize', error));
 
 async function init(): Promise<void> {
   injectStyles();
   await loadSettings();
   
-  // Listen for settings changes from popup
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'sync' && changes.ttsSettings?.newValue) {
       const newSettings = changes.ttsSettings.newValue as Partial<TTSSettings>;
       const wasEnabled = settings.widgetEnabled;
       settings = { ...settings, ...newSettings };
-      console.log('[Riddi] Settings updated:', settings);
       
-      // Handle widget visibility change
       if (wasEnabled !== settings.widgetEnabled) {
         updateWidgetVisibility();
       }
@@ -59,7 +52,10 @@ async function init(): Promise<void> {
   if (article) {
     await notifyBackground({ type: 'content-ready', article });
   }
+  
   injectWidget();
+  document.addEventListener('keydown', handleShortcuts, true);
+  
   chrome.runtime.onMessage.addListener((message: BackgroundToContentMessage, _sender, sendResponse) => {
     handleRuntimeMessage(message);
     sendResponse({ ok: true });
@@ -80,7 +76,6 @@ function extractArticle(): ArticleContent | null {
     
     textBlocks = extractBlocksFromReadabilityHTML(htmlContent, plainContent);
     
-    // Join blocks with double newline so TTS chunker respects paragraph boundaries
     const content = textBlocks.length > 0 
       ? textBlocks.map(b => b.text).join('\n\n')
       : plainContent;
@@ -93,9 +88,7 @@ function extractArticle(): ArticleContent | null {
       content,
       sentences: splitIntoSentences(content)
     };
-  } catch (error) {
-    console.warn('Readability parsing failed, falling back to body text', error);
-    
+  } catch {
     textBlocks = extractTextBlocksFallback(document.body);
     const content = textBlocks.map(b => b.text).join(' ');
     setHighlightElements(textBlocks, content);
@@ -126,7 +119,6 @@ function extractBlocksFromReadabilityHTML(htmlContent: string, plainContent: str
     const normalizedBlock = normalizeForMatching(blockText);
     const textKey = normalizedBlock.substring(0, 50);
     
-    // Skip duplicates (e.g., blockquote > p with same text)
     if (seenText.has(textKey)) continue;
     seenText.add(textKey);
     
@@ -283,7 +275,6 @@ function updateWidgetVisibility(): void {
 }
 
 function toggleWidgetExpanded(): void {
-  // Don't toggle during loading
   if (playbackState?.status === 'loading') return;
   
   isWidgetExpanded = !isWidgetExpanded;
@@ -308,7 +299,6 @@ function injectWidget(): void {
   widgetRoot = document.createElement('div');
   widgetRoot.id = WIDGET_ID;
 
-  // Controls panel (appears on the left of the main button)
   controlsPanel = document.createElement('div');
   controlsPanel.className = 'riddi-controls';
   controlsPanel.style.display = 'none';
@@ -344,7 +334,6 @@ function injectWidget(): void {
 
   controlsPanel.append(playBtn, pauseBtn, stopBtn);
 
-  // Main widget button (30x30 with icon background)
   mainBtn = document.createElement('button');
   mainBtn.className = 'riddi-main-btn';
   mainBtn.title = 'Riddi TTS';
@@ -352,10 +341,7 @@ function injectWidget(): void {
 
   widgetRoot.append(controlsPanel, mainBtn);
   document.body.appendChild(widgetRoot);
-
-  window.addEventListener('keydown', handleShortcuts, { passive: true });
   
-  // Initial state update
   updateWidgetVisibility();
   updateWidgetState();
 }
@@ -367,8 +353,6 @@ function handlePlayPauseClick(): void {
     void notifyBackground({ type: 'pause-tts' });
   } else if (playbackState.status === 'paused') {
     void notifyBackground({ type: 'resume-tts' });
-  } else if (playbackState.status === 'loading') {
-    // Already loading, do nothing
   }
 }
 
@@ -394,8 +378,6 @@ function handleRuntimeMessage(message: BackgroundToContentMessage): void {
       settings.widgetEnabled = message.enabled;
       updateWidgetVisibility();
       break;
-    default:
-      break;
   }
 }
 
@@ -405,14 +387,12 @@ function updateWidgetState(): void {
   const status = playbackState?.status ?? 'idle';
   widgetRoot.dataset.status = status;
   
-  // Update main button state for loading
   if (status === 'loading') {
     mainBtn.classList.add('riddi-btn--loading');
   } else {
     mainBtn.classList.remove('riddi-btn--loading');
   }
   
-  // Update button visibility and states
   if (status === 'playing') {
     playBtn.style.display = 'none';
     pauseBtn.style.display = 'flex';
@@ -421,7 +401,6 @@ function updateWidgetState(): void {
     playBtn.style.display = 'flex';
     pauseBtn.style.display = 'none';
     
-    // Change play button icon based on state
     if (status === 'paused') {
       playBtn.innerHTML = '▶';
       playBtn.title = 'Resume';
@@ -437,7 +416,6 @@ function updateWidgetState(): void {
     }
   }
   
-  // Reset highlights when stopped
   if (status === 'idle') {
     resetHighlightTracking();
   }
@@ -446,10 +424,7 @@ function updateWidgetState(): void {
 async function startPlayback(): Promise<void> {
   if (!article) return;
   
-  // Reset highlight tracking for new playback
   resetHighlightTracking();
-  
-  // Reload settings before starting to ensure we have the latest
   await loadSettings();
   
   const request: TTSRequest = {
@@ -458,10 +433,8 @@ async function startPlayback(): Promise<void> {
     settings
   };
   
-  console.log('[Riddi] Starting playback with settings:', settings);
-  
   notifyBackground({ type: 'start-tts', payload: request }).catch((error) =>
-    console.error('Failed to start TTS', error)
+    console.error('[Riddi] Failed to start TTS', error)
   );
 }
 
@@ -484,14 +457,19 @@ async function loadSettings(): Promise<void> {
 }
 
 function handleShortcuts(event: KeyboardEvent): void {
-  const key = event.key.toUpperCase();
-  const matches = (shortcut: typeof SHORTCUT_PLAY_PAUSE) =>
-    event.altKey === shortcut.altKey &&
-    event.shiftKey === shortcut.shiftKey &&
-    key === shortcut.key;
-
-  if (matches(SHORTCUT_PLAY_PAUSE)) {
+  const isModifier = event.code.startsWith('Shift') || 
+                     event.code.startsWith('Alt') || 
+                     event.code.startsWith('Control') || 
+                     event.code.startsWith('Meta');
+  if (isModifier) return;
+  
+  const hasCtrl = event.ctrlKey || event.metaKey;
+  if (!hasCtrl || !event.shiftKey) return;
+  
+  if (event.code === 'Space') {
     event.preventDefault();
+    event.stopPropagation();
+    
     if (playbackState?.status === 'playing') {
       void notifyBackground({ type: 'pause-tts' });
     } else if (playbackState?.status === 'paused') {
@@ -502,8 +480,9 @@ function handleShortcuts(event: KeyboardEvent): void {
     return;
   }
 
-  if (matches(SHORTCUT_STOP)) {
+  if (event.code === 'KeyX') {
     event.preventDefault();
+    event.stopPropagation();
     void notifyBackground({ type: 'stop-tts' });
     resetHighlightTracking();
   }
@@ -514,11 +493,9 @@ function injectStyles(): void {
   const style = document.createElement('style');
   style.id = 'tts-reader-styles';
   
-  // Get the icon URL from the extension
   const iconUrl = chrome.runtime.getURL('assets/riddi_icon.png');
   
   style.textContent = `
-    /* Widget container */
     #${WIDGET_ID} {
       position: fixed;
       right: 16px;
@@ -530,7 +507,6 @@ function injectStyles(): void {
       font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     
-    /* Main widget button - 30x30 with icon background */
     #${WIDGET_ID} .riddi-main-btn {
       width: 30px;
       height: 30px;
@@ -560,7 +536,6 @@ function injectStyles(): void {
       50% { opacity: 1; }
     }
     
-    /* Controls panel - appears on the left */
     #${WIDGET_ID} .riddi-controls {
       display: none;
       align-items: center;
@@ -584,7 +559,6 @@ function injectStyles(): void {
       }
     }
     
-    /* Control buttons - 22px height to fit in 30px panel */
     #${WIDGET_ID} .riddi-ctrl-btn {
       display: flex;
       align-items: center;
@@ -622,7 +596,6 @@ function injectStyles(): void {
       color: #ef4444;
     }
     
-    /* Page highlight styles - chunk container */
     .${HIGHLIGHT_CLASS} {
       background: linear-gradient(135deg, rgba(244, 124, 38, 0.12), rgba(255, 232, 210, 0.06)) !important;
       border-left: 3px solid rgba(244, 124, 38, 0.6) !important;
@@ -631,7 +604,6 @@ function injectStyles(): void {
       transition: background 200ms ease !important;
     }
     
-    /* Word-by-word highlight */
     .riddi-word {
       transition: all 100ms ease !important;
       border-radius: 3px !important;
@@ -644,15 +616,12 @@ function injectStyles(): void {
       margin: -1px -3px !important;
       border-radius: 4px !important;
       box-shadow: 0 0 0 2px rgba(244, 124, 38, 0.3), 0 2px 8px rgba(244, 124, 38, 0.25) !important;
+      animation: riddi-word-pulse 400ms ease-in-out !important;
     }
     
-    /* Pulse animation on current word */
     @keyframes riddi-word-pulse {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.02); }
-    }
-    .riddi-highlight-word {
-      animation: riddi-word-pulse 400ms ease-in-out !important;
     }
   `;
   document.head.appendChild(style);

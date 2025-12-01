@@ -75,8 +75,8 @@
     <section class="panel shortcuts">
       <h2>Keyboard shortcuts</h2>
       <ul>
-        <li><strong>Play / Pause</strong><span>Alt + Shift + P</span></li>
-        <li><strong>Stop</strong><span>Alt + Shift + S</span></li>
+        <li><strong>Play / Pause</strong><span>Ctrl + Shift + Space</span></li>
+        <li><strong>Stop</strong><span>Ctrl + Shift + X</span></li>
       </ul>
     </section>
   </div>

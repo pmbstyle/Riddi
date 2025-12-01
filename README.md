@@ -12,8 +12,8 @@ Work in progress
 - Pause/Resume or Stop from the widget or shortcuts. Settings are in the popup (toolbar icon).
 
 ### Keyboard shortcuts
-- Play/Pause: `Alt + Shift + P`
-- Stop: `Alt + Shift + S`
+- Play/Pause: `Ctrl + Shift + Space`
+- Stop: `Ctrl + Shift + X`
 
 ### Notes
 - Models and voice styles are bundled under `public/assets`.

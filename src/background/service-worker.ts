@@ -24,7 +24,7 @@ let playbackState: PlaybackState = {
 let activeRequestId: string | null = null;
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info('Riddi installed.');
+  console.info('[Riddi] Extension installed');
 });
 
 chrome.runtime.onMessage.addListener((message: ContentToBackgroundMessage | OffscreenToBackgroundMessage | PopupToBackgroundMessage, _sender, sendResponse) => {
@@ -131,10 +131,8 @@ async function handleContentMessage(message: ContentToBackgroundMessage): Promis
   switch (message.type) {
     case 'content-ready':
       lastArticle = message.article;
-      console.info('Content ready received');
       break;
     case 'start-tts':
-      console.info('Start TTS requested');
       await ensureOffscreenReady();
       activeRequestId = message.payload.requestId;
       updatePlaybackState({
@@ -148,22 +146,17 @@ async function handleContentMessage(message: ContentToBackgroundMessage): Promis
       await postToOffscreen({ type: 'synthesize', payload: message.payload });
       break;
     case 'pause-tts':
-      console.info('Pause TTS requested');
       await postToOffscreen({ type: 'pause' });
       updatePlaybackState({ status: 'paused' });
       break;
     case 'resume-tts':
-      console.info('Resume TTS requested');
       await postToOffscreen({ type: 'resume' });
       updatePlaybackState({ status: 'playing' });
       break;
     case 'stop-tts':
-      console.info('Stop TTS requested');
       await postToOffscreen({ type: 'stop' });
       activeRequestId = null;
       updatePlaybackState({ status: 'idle', positionSeconds: 0, durationSeconds: 0 });
-      break;
-    default:
       break;
   }
 }
@@ -171,7 +164,6 @@ async function handleContentMessage(message: ContentToBackgroundMessage): Promis
 async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Promise<void> {
   switch (message.type) {
     case 'ready':
-      console.info('Offscreen document ready for synthesis.');
       offscreenReady = true;
       offscreenReadyResolver?.();
       offscreenReadyResolver = null;
@@ -182,13 +174,10 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
         const prefix = '[offscreen]';
         if (level === 'error') console.error(prefix, message.message, message.detail ?? '');
         else if (level === 'warn') console.warn(prefix, message.message, message.detail ?? '');
-        else console.info(prefix, message.message, message.detail ?? '');
       }
       break;
     case 'tts-progress':
-      console.info('Offscreen progress', message.progress);
       if (activeRequestId && message.progress.requestId === activeRequestId) {
-        // Keep status as loading during synthesis
         updatePlaybackState({
           currentChunk: message.progress.step,
           totalChunks: message.progress.totalSteps
@@ -197,8 +186,6 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
       break;
     case 'tts-result':
       if (activeRequestId && message.result.requestId === activeRequestId) {
-        console.info('Offscreen result received', message.result);
-        // Update to playing status when first audio starts
         updatePlaybackState({
           status: 'playing',
           positionSeconds: 0,
@@ -217,32 +204,28 @@ async function handleOffscreenMessage(message: OffscreenToBackgroundMessage): Pr
           chunkIndex: message.chunkIndex,
           chunkText: message.chunkText,
           durationMs: message.durationMs
-        }).catch(err => console.warn('Failed to broadcast highlight:', err));
+        }).catch(() => {});
       }
       break;
     case 'tts-complete':
       if (activeRequestId && message.requestId === activeRequestId) {
-        console.info('Playback complete, total duration:', message.totalDuration);
         activeRequestId = null;
         updatePlaybackState({
           status: 'idle',
           positionSeconds: 0,
           durationSeconds: message.totalDuration
         });
-        // Send final highlight clear to content
         broadcastToContent({
           type: 'highlight-chunk',
-          chunkIndex: -1,  // -1 signals clear highlights
+          chunkIndex: -1,
           chunkText: '',
           durationMs: 0
         }).catch(() => {});
       }
       break;
     case 'tts-error':
-      console.error('Offscreen TTS error:', message.message);
+      console.error('[Riddi] TTS error:', message.message);
       updatePlaybackState({ status: 'error', error: message.message });
-      break;
-    default:
       break;
   }
 }
@@ -256,9 +239,7 @@ async function postToOffscreen(message: BackgroundToOffscreenMessage): Promise<v
   await ensureOffscreenReady();
   try {
     await chrome.runtime.sendMessage(message);
-  } catch (err) {
-    // If the offscreen document was closed, recreate and retry once.
-    console.warn('Retrying offscreen message after failure', err);
+  } catch {
     offscreenReady = false;
     offscreenReadyPromise = null;
     offscreenReadyResolver = null;
@@ -271,13 +252,10 @@ async function broadcastToContent(message: BackgroundToContentMessage): Promise<
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   for (const tab of tabs) {
     if (!tab.id) continue;
-    chrome.tabs.sendMessage(tab.id, message).catch(() => {
-      /* ignore tabs without the content script */
-    });
+    chrome.tabs.sendMessage(tab.id, message).catch(() => {});
   }
 }
 
-// Expose lastArticle for future use (popup, debugging)
 chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'get-last-article') {
     sendResponse({ article: lastArticle });
