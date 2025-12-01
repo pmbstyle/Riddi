@@ -4,6 +4,7 @@ import type { BackgroundToContentMessage, ContentToBackgroundMessage } from '@sh
 import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
 
 const WIDGET_ID = 'riddi-widget';
+const STYLES_ID = 'tts-reader-styles';
 
 let settings: TTSSettings = {
   voice: 'M1',
@@ -16,6 +17,7 @@ let article: ArticleContent | null = null;
 let playbackState: PlaybackState | null = null;
 let widgetRoot: HTMLDivElement | null = null;
 let isWidgetExpanded = false;
+let currentUrl = location.href;
 
 let mainBtn: HTMLButtonElement | null = null;
 let playBtn: HTMLButtonElement | null = null;
@@ -61,6 +63,105 @@ async function init(): Promise<void> {
     sendResponse({ ok: true });
     return true;
   });
+  
+  setupSPANavigationDetection();
+}
+
+function setupSPANavigationDetection(): void {
+  let lastTitle = document.title;
+  let lastPathname = location.pathname;
+  
+  window.addEventListener('popstate', () => scheduleNavigationCheck());
+  window.addEventListener('hashchange', () => scheduleNavigationCheck());
+  
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById(WIDGET_ID) && settings.widgetEnabled) {
+      ensureWidgetExists();
+    }
+    if (!document.getElementById(STYLES_ID)) {
+      injectStyles();
+    }
+    
+    const newPathname = location.pathname;
+    const newTitle = document.title;
+    
+    if (newPathname !== lastPathname) {
+      lastPathname = newPathname;
+      scheduleNavigationCheck();
+    } else if (newTitle !== lastTitle && newTitle.length > 0) {
+      lastTitle = newTitle;
+      scheduleNavigationCheck();
+    }
+  });
+  
+  observer.observe(document.documentElement, { 
+    childList: true, 
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['href']
+  });
+  
+  setInterval(() => {
+    if (location.href !== currentUrl) {
+      scheduleNavigationCheck();
+    }
+  }, 300);
+}
+
+let navigationCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleNavigationCheck(): void {
+  if (navigationCheckTimeout) {
+    clearTimeout(navigationCheckTimeout);
+  }
+  navigationCheckTimeout = setTimeout(() => {
+    handleNavigation();
+    navigationCheckTimeout = null;
+  }, 100);
+}
+
+function handleNavigation(): void {
+  const newUrl = location.href;
+  if (newUrl === currentUrl) return;
+  
+  currentUrl = newUrl;
+  
+  if (playbackState?.status === 'playing' || playbackState?.status === 'loading') {
+    void notifyBackground({ type: 'stop-tts' });
+  }
+  
+  resetHighlightTracking();
+  playbackState = null;
+  article = null;
+  textBlocks = [];
+  
+  setTimeout(async () => {
+    ensureWidgetExists();
+    updateWidgetState();
+    
+    const newArticle = extractArticle();
+    if (newArticle) {
+      article = newArticle;
+      await notifyBackground({ type: 'content-ready', article });
+    }
+  }, 500);
+}
+
+function ensureWidgetExists(): void {
+  if (!document.getElementById(STYLES_ID)) {
+    injectStyles();
+  }
+  
+  if (!document.getElementById(WIDGET_ID)) {
+    widgetRoot = null;
+    mainBtn = null;
+    playBtn = null;
+    pauseBtn = null;
+    stopBtn = null;
+    controlsPanel = null;
+    isWidgetExpanded = false;
+    injectWidget();
+  }
 }
 
 function extractArticle(): ArticleContent | null {
@@ -489,9 +590,9 @@ function handleShortcuts(event: KeyboardEvent): void {
 }
 
 function injectStyles(): void {
-  if (document.getElementById('tts-reader-styles')) return;
+  if (document.getElementById(STYLES_ID)) return;
   const style = document.createElement('style');
-  style.id = 'tts-reader-styles';
+  style.id = STYLES_ID;
   
   const iconUrl = chrome.runtime.getURL('assets/riddi_icon.png');
   
