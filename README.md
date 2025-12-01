@@ -11,9 +11,8 @@
 - Pause/Resume or Stop from the widget or shortcuts. Settings are in the popup (toolbar icon).
 
 ### Keyboard shortcuts
-- Play/Pause: `Ctrl/Cmd + Shift + R`
-- Stop: `Ctrl/Cmd + Shift + X`
-- Skip sentence: `Ctrl/Cmd + Shift + Arrow` (planned)
+- Play/Pause: `Alt + Shift + P`
+- Stop: `Alt + Shift + S`
 
 ### Notes
 - Models and voice styles are bundled under `public/assets`.

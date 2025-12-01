@@ -2,10 +2,11 @@ import type {
   BackgroundToContentMessage,
   BackgroundToOffscreenMessage,
   ContentToBackgroundMessage,
-  OffscreenToBackgroundMessage
+  OffscreenToBackgroundMessage,
+  PopupToBackgroundMessage
 } from '@shared/messages';
-import { isContentMessage, isOffscreenMessage } from '@shared/messages';
-import type { ArticleContent, PlaybackState, TTSRequest } from '@shared/types';
+import { isContentMessage, isOffscreenMessage, isPopupMessage } from '@shared/messages';
+import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
 
 const OFFSCREEN_DOCUMENT_PATH = 'src/offscreen/offscreen.html';
 let offscreenReady = false;
@@ -26,7 +27,7 @@ chrome.runtime.onInstalled.addListener(() => {
   console.info('Riddi installed.');
 });
 
-chrome.runtime.onMessage.addListener((message: ContentToBackgroundMessage | OffscreenToBackgroundMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: ContentToBackgroundMessage | OffscreenToBackgroundMessage | PopupToBackgroundMessage, _sender, sendResponse) => {
   if (isContentMessage(message)) {
     void handleContentMessage(message);
     sendResponse({ ok: true });
@@ -36,6 +37,11 @@ chrome.runtime.onMessage.addListener((message: ContentToBackgroundMessage | Offs
   if (isOffscreenMessage(message)) {
     void handleOffscreenMessage(message);
     sendResponse({ ok: true });
+    return true;
+  }
+
+  if (isPopupMessage(message)) {
+    void handlePopupMessage(message, sendResponse);
     return true;
   }
 
@@ -65,6 +71,60 @@ async function ensureOffscreenReady(): Promise<void> {
     });
   }
   await offscreenReadyPromise;
+}
+
+async function handlePopupMessage(message: PopupToBackgroundMessage, sendResponse: (response: unknown) => void): Promise<void> {
+  switch (message.type) {
+    case 'get-playback-state':
+      sendResponse({ state: playbackState, hasArticle: !!lastArticle });
+      return;
+    case 'popup-start-tts':
+      if (lastArticle) {
+        const saved = await chrome.storage.sync.get(['ttsSettings']);
+        const settings: TTSSettings = saved?.ttsSettings ?? {
+          voice: 'M1',
+          speed: 1,
+          qualitySteps: 6,
+          widgetEnabled: true
+        };
+        
+        await ensureOffscreenReady();
+        const requestId = crypto.randomUUID();
+        activeRequestId = requestId;
+        updatePlaybackState({
+          status: 'loading',
+          currentChunk: 0,
+          totalChunks: 0,
+          positionSeconds: 0,
+          durationSeconds: 0,
+          highlightedSentence: 0
+        });
+        await postToOffscreen({
+          type: 'synthesize',
+          payload: { requestId, text: lastArticle.content, settings }
+        });
+      }
+      sendResponse({ ok: true });
+      return;
+    case 'popup-pause-tts':
+      await postToOffscreen({ type: 'pause' });
+      updatePlaybackState({ status: 'paused' });
+      sendResponse({ ok: true });
+      return;
+    case 'popup-resume-tts':
+      await postToOffscreen({ type: 'resume' });
+      updatePlaybackState({ status: 'playing' });
+      sendResponse({ ok: true });
+      return;
+    case 'popup-stop-tts':
+      await postToOffscreen({ type: 'stop' });
+      activeRequestId = null;
+      updatePlaybackState({ status: 'idle', positionSeconds: 0, durationSeconds: 0 });
+      sendResponse({ ok: true });
+      return;
+    default:
+      sendResponse({ ok: false });
+  }
 }
 
 async function handleContentMessage(message: ContentToBackgroundMessage): Promise<void> {

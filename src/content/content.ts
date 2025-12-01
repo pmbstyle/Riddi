@@ -4,26 +4,27 @@ import type { BackgroundToContentMessage, ContentToBackgroundMessage } from '@sh
 import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
 
 const WIDGET_ID = 'riddi-widget';
-const APP_NAME = 'Riddi';
-const SHORTCUT_PLAY_PAUSE = { ctrlKey: false, metaKey: true, shiftKey: true, key: 'R' }; // Cmd/Ctrl+Shift+R
-const SHORTCUT_STOP = { ctrlKey: false, metaKey: true, shiftKey: true, key: 'X' }; // Cmd/Ctrl+Shift+X
+const SHORTCUT_PLAY_PAUSE = { altKey: true, shiftKey: true, key: 'P' }; // Alt+Shift+P
+const SHORTCUT_STOP = { altKey: true, shiftKey: true, key: 'S' }; // Alt+Shift+S
 
 let settings: TTSSettings = {
   voice: 'M1',
   speed: 1.0,
   qualitySteps: 6,
-  autoStart: false
+  widgetEnabled: true
 };
 
 let article: ArticleContent | null = null;
 let playbackState: PlaybackState | null = null;
 let widgetRoot: HTMLDivElement | null = null;
+let isWidgetExpanded = false;
 
 // Widget button references for reactive updates
+let mainBtn: HTMLButtonElement | null = null;
 let playBtn: HTMLButtonElement | null = null;
 let pauseBtn: HTMLButtonElement | null = null;
 let stopBtn: HTMLButtonElement | null = null;
-let statusLabel: HTMLSpanElement | null = null;
+let controlsPanel: HTMLDivElement | null = null;
 
 // Track text blocks with their DOM elements for reliable highlighting
 interface TextBlock {
@@ -43,8 +44,14 @@ async function init(): Promise<void> {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'sync' && changes.ttsSettings?.newValue) {
       const newSettings = changes.ttsSettings.newValue as Partial<TTSSettings>;
+      const wasEnabled = settings.widgetEnabled;
       settings = { ...settings, ...newSettings };
       console.log('[Riddi] Settings updated:', settings);
+      
+      // Handle widget visibility change
+      if (wasEnabled !== settings.widgetEnabled) {
+        updateWidgetVisibility();
+      }
     }
   });
   
@@ -264,57 +271,92 @@ function extractTextBlocksFallback(container: HTMLElement): TextBlock[] {
   return blocks;
 }
 
+function updateWidgetVisibility(): void {
+  if (!widgetRoot) return;
+  
+  if (settings.widgetEnabled) {
+    widgetRoot.style.display = 'flex';
+  } else {
+    widgetRoot.style.display = 'none';
+    isWidgetExpanded = false;
+  }
+}
+
+function toggleWidgetExpanded(): void {
+  // Don't toggle during loading
+  if (playbackState?.status === 'loading') return;
+  
+  isWidgetExpanded = !isWidgetExpanded;
+  updateControlsVisibility();
+}
+
+function updateControlsVisibility(): void {
+  if (!controlsPanel || !mainBtn) return;
+  
+  if (isWidgetExpanded) {
+    controlsPanel.style.display = 'flex';
+    mainBtn.classList.add('riddi-btn--expanded');
+  } else {
+    controlsPanel.style.display = 'none';
+    mainBtn.classList.remove('riddi-btn--expanded');
+  }
+}
+
 function injectWidget(): void {
   if (document.getElementById(WIDGET_ID)) return;
 
   widgetRoot = document.createElement('div');
   widgetRoot.id = WIDGET_ID;
 
-  const header = document.createElement('div');
-  header.className = 'tts-reader-widget__header';
-  
-  const title = document.createElement('span');
-  title.textContent = APP_NAME;
-  
-  statusLabel = document.createElement('span');
-  statusLabel.className = 'tts-reader-widget__status';
-  statusLabel.textContent = 'Ready';
-  
-  header.append(title, statusLabel);
-
-  const controls = document.createElement('div');
-  controls.className = 'tts-reader-widget__controls';
+  // Controls panel (appears on the left of the main button)
+  controlsPanel = document.createElement('div');
+  controlsPanel.className = 'riddi-controls';
+  controlsPanel.style.display = 'none';
 
   playBtn = document.createElement('button');
-  playBtn.className = 'tts-btn tts-btn--play';
+  playBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--play';
   playBtn.innerHTML = '▶';
   playBtn.title = 'Play';
-  playBtn.addEventListener('click', handlePlayPauseClick);
+  playBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlePlayPauseClick();
+  });
 
   pauseBtn = document.createElement('button');
-  pauseBtn.className = 'tts-btn tts-btn--pause';
+  pauseBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--pause';
   pauseBtn.innerHTML = '⏸';
   pauseBtn.title = 'Pause';
   pauseBtn.style.display = 'none';
-  pauseBtn.addEventListener('click', handlePlayPauseClick);
+  pauseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handlePlayPauseClick();
+  });
 
   stopBtn = document.createElement('button');
-  stopBtn.className = 'tts-btn tts-btn--stop';
+  stopBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--stop';
   stopBtn.innerHTML = '⏹';
   stopBtn.title = 'Stop';
-  stopBtn.addEventListener('click', () => {
+  stopBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     void notifyBackground({ type: 'stop-tts' });
     resetHighlightTracking();
   });
 
-  controls.append(playBtn, pauseBtn, stopBtn);
+  controlsPanel.append(playBtn, pauseBtn, stopBtn);
 
-  widgetRoot.append(header, controls);
+  // Main widget button (30x30 with icon background)
+  mainBtn = document.createElement('button');
+  mainBtn.className = 'riddi-main-btn';
+  mainBtn.title = 'Riddi TTS';
+  mainBtn.addEventListener('click', toggleWidgetExpanded);
+
+  widgetRoot.append(controlsPanel, mainBtn);
   document.body.appendChild(widgetRoot);
 
   window.addEventListener('keydown', handleShortcuts, { passive: true });
   
   // Initial state update
+  updateWidgetVisibility();
   updateWidgetState();
 }
 
@@ -348,27 +390,27 @@ function handleRuntimeMessage(message: BackgroundToContentMessage): void {
         highlightChunk(message.chunkIndex, message.chunkText, message.durationMs);
       }
       break;
+    case 'widget-visibility':
+      settings.widgetEnabled = message.enabled;
+      updateWidgetVisibility();
+      break;
     default:
       break;
   }
 }
 
 function updateWidgetState(): void {
-  if (!widgetRoot || !playBtn || !pauseBtn || !statusLabel) return;
+  if (!widgetRoot || !playBtn || !pauseBtn || !mainBtn) return;
   
   const status = playbackState?.status ?? 'idle';
   widgetRoot.dataset.status = status;
   
-  // Update status label
-  const statusLabels: Record<string, string> = {
-    idle: 'Ready',
-    loading: 'Loading...',
-    playing: 'Playing',
-    paused: 'Paused',
-    error: 'Error'
-  };
-  statusLabel.textContent = statusLabels[status] ?? status;
-  statusLabel.className = `tts-reader-widget__status tts-reader-widget__status--${status}`;
+  // Update main button state for loading
+  if (status === 'loading') {
+    mainBtn.classList.add('riddi-btn--loading');
+  } else {
+    mainBtn.classList.remove('riddi-btn--loading');
+  }
   
   // Update button visibility and states
   if (status === 'playing') {
@@ -443,10 +485,9 @@ async function loadSettings(): Promise<void> {
 
 function handleShortcuts(event: KeyboardEvent): void {
   const key = event.key.toUpperCase();
-  const isMeta = navigator.platform.toLowerCase().includes('mac');
   const matches = (shortcut: typeof SHORTCUT_PLAY_PAUSE) =>
+    event.altKey === shortcut.altKey &&
     event.shiftKey === shortcut.shiftKey &&
-    (isMeta ? event.metaKey : event.ctrlKey) === true &&
     key === shortcut.key;
 
   if (matches(SHORTCUT_PLAY_PAUSE)) {
@@ -472,104 +513,119 @@ function injectStyles(): void {
   if (document.getElementById('tts-reader-styles')) return;
   const style = document.createElement('style');
   style.id = 'tts-reader-styles';
+  
+  // Get the icon URL from the extension
+  const iconUrl = chrome.runtime.getURL('assets/riddi_icon.png');
+  
   style.textContent = `
-    /* Widget styles */
+    /* Widget container */
     #${WIDGET_ID} {
       position: fixed;
       right: 16px;
       bottom: 16px;
       z-index: 2147483647;
-      background: #0f172a;
-      color: #e2e8f0;
-      border-radius: 14px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.05);
-      overflow: hidden;
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-    #${WIDGET_ID} .tts-reader-widget__header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      font-weight: 700;
-      font-size: 13px;
-      letter-spacing: 0.02em;
-      background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      gap: 0;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
-    #${WIDGET_ID} .tts-reader-widget__status {
-      font-size: 11px;
-      font-weight: 500;
-      padding: 3px 8px;
-      border-radius: 10px;
-      background: rgba(255,255,255,0.08);
-      color: #94a3b8;
+    
+    /* Main widget button - 30x30 with icon background */
+    #${WIDGET_ID} .riddi-main-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: none;
+      background: url('${iconUrl}') center/cover no-repeat;
+      cursor: pointer;
+      transition: transform 150ms ease, box-shadow 150ms ease;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
-    #${WIDGET_ID} .tts-reader-widget__status--playing {
-      background: rgba(34, 197, 94, 0.2);
-      color: #4ade80;
+    #${WIDGET_ID} .riddi-main-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
-    #${WIDGET_ID} .tts-reader-widget__status--loading {
-      background: rgba(234, 179, 8, 0.2);
-      color: #facc15;
+    #${WIDGET_ID} .riddi-main-btn.riddi-btn--expanded {
+      transform: scale(1.05);
     }
-    #${WIDGET_ID} .tts-reader-widget__status--paused {
-      background: rgba(14, 165, 233, 0.2);
-      color: #38bdf8;
+    #${WIDGET_ID} .riddi-main-btn.riddi-btn--loading {
+      cursor: not-allowed;
+      opacity: 0.7;
+      animation: riddi-pulse 1.5s ease-in-out infinite;
     }
-    #${WIDGET_ID} .tts-reader-widget__status--error {
-      background: rgba(239, 68, 68, 0.2);
-      color: #f87171;
+    
+    @keyframes riddi-pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
     }
-    #${WIDGET_ID} .tts-reader-widget__controls {
-      display: flex;
-      gap: 6px;
-      padding: 10px 12px;
+    
+    /* Controls panel - appears on the left */
+    #${WIDGET_ID} .riddi-controls {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      background: #2D2D2D;
+      border-radius: 15px;
+      padding: 4px 8px;
+      margin-right: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      animation: riddi-slide-in 150ms ease;
     }
-    #${WIDGET_ID} .tts-btn {
+    
+    @keyframes riddi-slide-in {
+      from {
+        opacity: 0;
+        transform: translateX(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    
+    /* Control buttons - 22px height to fit in 30px panel */
+    #${WIDGET_ID} .riddi-ctrl-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 40px;
-      height: 40px;
-      background: #1e293b;
-      color: #e2e8f0;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
+      width: 22px;
+      height: 22px;
+      background: transparent;
+      color: #FFE8D2;
+      border: none;
+      border-radius: 6px;
       cursor: pointer;
-      font-size: 16px;
-      transition: all 150ms ease;
+      font-size: 12px;
+      transition: all 100ms ease;
     }
-    #${WIDGET_ID} .tts-btn:hover:not(:disabled) {
-      background: #0ea5e9;
-      color: #fff;
-      border-color: #0ea5e9;
-      transform: scale(1.05);
+    #${WIDGET_ID} .riddi-ctrl-btn:hover:not(:disabled) {
+      background: rgba(244, 124, 38, 0.3);
+      color: #F47C26;
     }
-    #${WIDGET_ID} .tts-btn:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    #${WIDGET_ID} .tts-btn:disabled {
-      opacity: 0.5;
+    #${WIDGET_ID} .riddi-ctrl-btn:disabled {
+      opacity: 0.4;
       cursor: not-allowed;
     }
-    #${WIDGET_ID} .tts-btn--play {
-      background: linear-gradient(135deg, #0ea5e9, #0284c7);
-      border-color: #0ea5e9;
-      color: #fff;
+    #${WIDGET_ID} .riddi-ctrl-btn--play {
+      color: #F47C26;
     }
-    #${WIDGET_ID} .tts-btn--play:hover:not(:disabled) {
-      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+    #${WIDGET_ID} .riddi-ctrl-btn--play:hover:not(:disabled) {
+      background: rgba(244, 124, 38, 0.4);
+      color: white;
     }
-    #${WIDGET_ID} .tts-btn--stop:hover:not(:disabled) {
-      background: #ef4444;
-      border-color: #ef4444;
+    #${WIDGET_ID} .riddi-ctrl-btn--pause {
+      color: #F47C26;
+    }
+    #${WIDGET_ID} .riddi-ctrl-btn--stop:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.3);
+      color: #ef4444;
     }
     
     /* Page highlight styles - chunk container */
     .${HIGHLIGHT_CLASS} {
-      background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(56, 189, 248, 0.06)) !important;
-      border-left: 3px solid rgba(14, 165, 233, 0.6) !important;
+      background: linear-gradient(135deg, rgba(244, 124, 38, 0.12), rgba(255, 232, 210, 0.06)) !important;
+      border-left: 3px solid rgba(244, 124, 38, 0.6) !important;
       padding-left: 8px !important;
       margin-left: -11px !important;
       transition: background 200ms ease !important;
@@ -582,12 +638,12 @@ function injectStyles(): void {
     }
     
     .riddi-highlight-word {
-      background: linear-gradient(135deg, rgba(14, 165, 233, 0.5), rgba(56, 189, 248, 0.4)) !important;
-      color: #0c4a6e !important;
+      background: linear-gradient(135deg, rgba(244, 124, 38, 0.5), rgba(255, 232, 210, 0.4)) !important;
+      color: #2D2D2D !important;
       padding: 1px 3px !important;
       margin: -1px -3px !important;
       border-radius: 4px !important;
-      box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.3), 0 2px 8px rgba(14, 165, 233, 0.25) !important;
+      box-shadow: 0 0 0 2px rgba(244, 124, 38, 0.3), 0 2px 8px rgba(244, 124, 38, 0.25) !important;
     }
     
     /* Pulse animation on current word */

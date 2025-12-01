@@ -13,9 +13,17 @@ export type ContentToBackgroundMessage =
   | { type: 'resume-tts' }
   | { type: 'stop-tts' };
 
+export type PopupToBackgroundMessage =
+  | { type: 'popup-start-tts' }
+  | { type: 'popup-pause-tts' }
+  | { type: 'popup-resume-tts' }
+  | { type: 'popup-stop-tts' }
+  | { type: 'get-playback-state' };
+
 export type BackgroundToContentMessage =
   | { type: 'playback-state'; state: PlaybackState }
-  | { type: 'highlight-chunk'; chunkIndex: number; chunkText: string; durationMs: number };
+  | { type: 'highlight-chunk'; chunkIndex: number; chunkText: string; durationMs: number }
+  | { type: 'widget-visibility'; enabled: boolean };
 
 export type BackgroundToOffscreenMessage =
   | { type: 'synthesize'; payload: TTSRequest }
@@ -34,6 +42,7 @@ export type OffscreenToBackgroundMessage =
 
 export type RuntimeMessage =
   | ContentToBackgroundMessage
+  | PopupToBackgroundMessage
   | BackgroundToContentMessage
   | BackgroundToOffscreenMessage
   | OffscreenToBackgroundMessage;
@@ -61,5 +70,17 @@ export function isContentMessage(
     message.type === 'pause-tts' ||
     message.type === 'resume-tts' ||
     message.type === 'stop-tts'
+  );
+}
+
+export function isPopupMessage(
+  message: RuntimeMessage
+): message is PopupToBackgroundMessage {
+  return (
+    message.type === 'popup-start-tts' ||
+    message.type === 'popup-pause-tts' ||
+    message.type === 'popup-resume-tts' ||
+    message.type === 'popup-stop-tts' ||
+    message.type === 'get-playback-state'
   );
 }

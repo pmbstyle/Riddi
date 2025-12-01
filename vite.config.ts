@@ -26,8 +26,19 @@ const manifest = defineManifest({
       run_at: 'document_idle'
     }
   ],
+  icons: {
+    '16': 'assets/riddi_icon.png',
+    '32': 'assets/riddi_icon.png',
+    '48': 'assets/riddi_icon.png',
+    '128': 'assets/riddi_icon.png'
+  },
   action: {
-    default_popup: 'src/popup/index.html'
+    default_popup: 'src/popup/index.html',
+    default_icon: {
+      '16': 'assets/riddi_icon.png',
+      '32': 'assets/riddi_icon.png',
+      '48': 'assets/riddi_icon.png'
+    }
   },
   web_accessible_resources: [
     {

@@ -4,7 +4,7 @@ export interface TTSSettings {
   voice: VoiceId;
   speed: number; // 0.5 - 2.0
   qualitySteps: number; // denoising steps (1-10+)
-  autoStart: boolean;
+  widgetEnabled: boolean;
 }
 
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
