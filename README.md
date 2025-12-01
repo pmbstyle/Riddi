@@ -3,6 +3,7 @@
 </p>
 
 ## Riddi – local TTS reader (Chrome extension)
+Work in progress
 
 ### How to use
 - Load the unpacked extension from `dist` in Chrome.
