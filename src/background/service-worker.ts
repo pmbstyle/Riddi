@@ -155,6 +155,14 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
       updatePlaybackState({ status: 'idle', positionSeconds: 0, durationSeconds: 0 });
       sendResponse({ ok: true });
       return;
+    case 'popup-toggle-selection-mode': {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.id) {
+        sendToTab(activeTab.id, { type: 'toggle-selection-mode' });
+      }
+      sendResponse({ ok: true });
+      return;
+    }
     default:
       sendResponse({ ok: false });
   }

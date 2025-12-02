@@ -18,12 +18,14 @@ export type PopupToBackgroundMessage =
   | { type: 'popup-pause-tts' }
   | { type: 'popup-resume-tts' }
   | { type: 'popup-stop-tts' }
-  | { type: 'get-playback-state' };
+  | { type: 'get-playback-state' }
+  | { type: 'popup-toggle-selection-mode' };
 
 export type BackgroundToContentMessage =
   | { type: 'playback-state'; state: PlaybackState }
   | { type: 'highlight-chunk'; chunkIndex: number; chunkText: string; durationMs: number }
-  | { type: 'widget-visibility'; enabled: boolean };
+  | { type: 'widget-visibility'; enabled: boolean }
+  | { type: 'toggle-selection-mode' };
 
 export type BackgroundToOffscreenMessage =
   | { type: 'synthesize'; payload: TTSRequest }
@@ -81,6 +83,7 @@ export function isPopupMessage(
     message.type === 'popup-pause-tts' ||
     message.type === 'popup-resume-tts' ||
     message.type === 'popup-stop-tts' ||
-    message.type === 'get-playback-state'
+    message.type === 'get-playback-state' ||
+    message.type === 'popup-toggle-selection-mode'
   );
 }

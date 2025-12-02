@@ -14,6 +14,14 @@
     <section class="panel playback-panel">
       <div class="playback-controls">
         <button
+          class="btn btn--select"
+          :disabled="playbackState.status === 'loading'"
+          title="Select text block to read (Ctrl+Shift+S)"
+          @click="handleSelectMode"
+        >
+          <span class="btn__icon">⌖</span>
+        </button>
+        <button
           v-if="playbackState.status !== 'playing'"
           class="btn btn--play"
           :disabled="!hasArticle || playbackState.status === 'loading'"
@@ -77,6 +85,7 @@
       <ul>
         <li><strong>Play / Pause</strong><span>Ctrl + Shift + Space</span></li>
         <li><strong>Stop</strong><span>Ctrl + Shift + X</span></li>
+        <li><strong>Select text</strong><span>Ctrl + Shift + S</span></li>
       </ul>
     </section>
   </div>
@@ -148,6 +157,12 @@ const handlePlayPause = async () => {
 const handleStop = async () => {
   await chrome.runtime.sendMessage({ type: 'popup-stop-tts' });
   await fetchPlaybackState();
+};
+
+const handleSelectMode = async () => {
+  await chrome.runtime.sendMessage({ type: 'popup-toggle-selection-mode' });
+  // Close popup so user can select on page
+  window.close();
 };
 
 onMounted(async () => {
@@ -256,6 +271,16 @@ watch(
 .btn--pause:hover:not(:disabled) {
   background: linear-gradient(135deg, #ff8c36, #F47C26);
   transform: scale(1.02);
+}
+.btn--select {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFE8D2;
+  width: 50px;
+  font-size: 42px;
+}
+.btn--select:hover:not(:disabled) {
+  background: rgba(244, 124, 38, 0.4);
+  color: #F47C26;
 }
 .btn--stop {
   background: rgba(255, 255, 255, 0.1);

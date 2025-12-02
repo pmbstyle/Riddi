@@ -5,6 +5,8 @@ import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@sh
 
 const WIDGET_ID = 'riddi-widget';
 const STYLES_ID = 'tts-reader-styles';
+const SELECTION_MODE_CLASS = 'riddi-selection-mode-active';
+const SELECTION_HOVER_CLASS = 'riddi-selection-hover';
 
 let settings: TTSSettings = {
   voice: 'M1',
@@ -31,6 +33,11 @@ interface TextBlock {
   startOffset: number;
 }
 let textBlocks: TextBlock[] = [];
+
+// Selection mode state
+let isSelectionModeActive = false;
+let currentHoveredElement: HTMLElement | null = null;
+let selectBtn: HTMLButtonElement | null = null;
 
 init().catch((error) => console.error('[Riddi] Failed to initialize', error));
 
@@ -126,6 +133,11 @@ function handleNavigation(): void {
   
   currentUrl = newUrl;
   
+  // Disable selection mode on navigation
+  if (isSelectionModeActive) {
+    disableSelectionMode();
+  }
+  
   if (playbackState?.status === 'playing' || playbackState?.status === 'loading') {
     void notifyBackground({ type: 'stop-tts' });
   }
@@ -158,6 +170,7 @@ function ensureWidgetExists(): void {
     playBtn = null;
     pauseBtn = null;
     stopBtn = null;
+    selectBtn = null;
     controlsPanel = null;
     isWidgetExpanded = false;
     injectWidget();
@@ -404,6 +417,15 @@ function injectWidget(): void {
   controlsPanel.className = 'riddi-controls';
   controlsPanel.style.display = 'none';
 
+  selectBtn = document.createElement('button');
+  selectBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--select';
+  selectBtn.innerHTML = '⌖';
+  selectBtn.title = 'Select text block (Ctrl+Shift+S)';
+  selectBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSelectionMode();
+  });
+
   playBtn = document.createElement('button');
   playBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--play';
   playBtn.innerHTML = '▶';
@@ -433,7 +455,7 @@ function injectWidget(): void {
     resetHighlightTracking();
   });
 
-  controlsPanel.append(playBtn, pauseBtn, stopBtn);
+  controlsPanel.append(selectBtn, playBtn, pauseBtn, stopBtn);
 
   mainBtn = document.createElement('button');
   mainBtn.className = 'riddi-main-btn';
@@ -454,6 +476,257 @@ function handlePlayPauseClick(): void {
     void notifyBackground({ type: 'pause-tts' });
   } else if (playbackState.status === 'paused') {
     void notifyBackground({ type: 'resume-tts' });
+  }
+}
+
+// Selection Mode Functions
+function toggleSelectionMode(): void {
+  if (isSelectionModeActive) {
+    disableSelectionMode();
+  } else {
+    enableSelectionMode();
+  }
+}
+
+function enableSelectionMode(): void {
+  if (isSelectionModeActive) return;
+  
+  // Stop any active playback first
+  if (playbackState?.status === 'playing' || playbackState?.status === 'loading') {
+    void notifyBackground({ type: 'stop-tts' });
+    resetHighlightTracking();
+  }
+  
+  isSelectionModeActive = true;
+  document.body.classList.add(SELECTION_MODE_CLASS);
+  
+  document.addEventListener('mousemove', handleSelectionMouseMove, true);
+  document.addEventListener('click', handleSelectionClick, true);
+  document.addEventListener('keydown', handleSelectionKeydown, true);
+  
+  updateSelectionButtonState();
+}
+
+function disableSelectionMode(): void {
+  if (!isSelectionModeActive) return;
+  
+  isSelectionModeActive = false;
+  document.body.classList.remove(SELECTION_MODE_CLASS);
+  
+  if (currentHoveredElement) {
+    currentHoveredElement.classList.remove(SELECTION_HOVER_CLASS);
+    currentHoveredElement = null;
+  }
+  
+  document.removeEventListener('mousemove', handleSelectionMouseMove, true);
+  document.removeEventListener('click', handleSelectionClick, true);
+  document.removeEventListener('keydown', handleSelectionKeydown, true);
+  
+  updateSelectionButtonState();
+}
+
+function handleSelectionKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    disableSelectionMode();
+  }
+}
+
+function handleSelectionMouseMove(event: MouseEvent): void {
+  if (!isSelectionModeActive) return;
+  
+  const target = event.target as HTMLElement;
+  if (!target || target.closest(`#${WIDGET_ID}`)) return;
+  
+  const selectableElement = findSelectableElement(target);
+  
+  if (selectableElement !== currentHoveredElement) {
+    if (currentHoveredElement) {
+      currentHoveredElement.classList.remove(SELECTION_HOVER_CLASS);
+    }
+    
+    currentHoveredElement = selectableElement;
+    
+    if (currentHoveredElement) {
+      currentHoveredElement.classList.add(SELECTION_HOVER_CLASS);
+    }
+  }
+}
+
+function handleSelectionClick(event: MouseEvent): void {
+  if (!isSelectionModeActive) return;
+  
+  const target = event.target as HTMLElement;
+  
+  // Ignore clicks on widget
+  if (target.closest(`#${WIDGET_ID}`)) return;
+  
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const selectableElement = findSelectableElement(target);
+  
+  if (selectableElement) {
+    const extractedArticle = extractArticleFromElement(selectableElement);
+    
+    if (extractedArticle && extractedArticle.content.trim().length > 10) {
+      // Update the article with selected content
+      article = extractedArticle;
+      
+      // Disable selection mode
+      disableSelectionMode();
+      
+      // Auto-start TTS with selected content
+      void startPlayback();
+    }
+  }
+}
+
+function findSelectableElement(target: HTMLElement): HTMLElement | null {
+  if (target.closest(`#${WIDGET_ID}`)) return null;
+  
+  let element: HTMLElement | null = target;
+  
+  while (element && element !== document.body) {
+    // Skip tiny elements
+    if (element.offsetWidth < 50 || element.offsetHeight < 20) {
+      element = element.parentElement;
+      continue;
+    }
+    
+    // Skip hidden elements
+    if (element.offsetParent === null && element.tagName !== 'BODY') {
+      element = element.parentElement;
+      continue;
+    }
+    
+    // Skip excluded elements
+    if (element.closest('nav, footer, header, aside, [role="navigation"], [role="banner"], script, style, noscript')) {
+      element = element.parentElement;
+      continue;
+    }
+    
+    // Check if it's a good text container
+    const text = element.innerText?.trim() || '';
+    if (text.length >= 10) {
+      const tagLower = element.tagName.toLowerCase();
+      if (['article', 'main', 'section', 'p', 'blockquote', 'pre'].includes(tagLower)) {
+        return element;
+      }
+      
+      if (['div', 'span'].includes(tagLower)) {
+        const parent = element.parentElement;
+        if (parent && ['article', 'main', 'section'].includes(parent.tagName.toLowerCase())) {
+          return parent;
+        }
+        return element;
+      }
+      
+      if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td', 'th', 'figcaption'].includes(tagLower)) {
+        return element;
+      }
+    }
+    
+    element = element.parentElement;
+  }
+  
+  return null;
+}
+
+function extractArticleFromElement(element: HTMLElement): ArticleContent | null {
+  try {
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(element.cloneNode(true));
+    
+    const doc = document.implementation.createHTMLDocument('Selected Content');
+    doc.body.innerHTML = wrapper.innerHTML;
+    
+    const reader = new Readability(doc);
+    const parsed = reader.parse();
+    
+    if (parsed && parsed.textContent?.trim()) {
+      const plainContent = parsed.textContent?.trim() || '';
+      
+      textBlocks = extractBlocksFromSelectedElement(element);
+      
+      const content = textBlocks.length > 0 
+        ? textBlocks.map(b => b.text).join('\n\n')
+        : plainContent;
+      
+      setHighlightElements(textBlocks, content);
+      
+      return {
+        title: document.title,
+        content,
+        sentences: splitIntoSentences(content)
+      };
+    }
+    
+    return extractArticleFallback(element);
+  } catch {
+    return extractArticleFallback(element);
+  }
+}
+
+function extractArticleFallback(element: HTMLElement): ArticleContent | null {
+  textBlocks = extractBlocksFromSelectedElement(element);
+  
+  if (textBlocks.length === 0) {
+    const text = element.innerText?.trim();
+    if (text && text.length >= 10) {
+      textBlocks = [{ text, element, startOffset: 0 }];
+    }
+  }
+  
+  if (textBlocks.length === 0) return null;
+  
+  const content = textBlocks.map(b => b.text).join('\n\n');
+  setHighlightElements(textBlocks, content);
+  
+  return {
+    title: document.title,
+    content,
+    sentences: splitIntoSentences(content)
+  };
+}
+
+function extractBlocksFromSelectedElement(container: HTMLElement): TextBlock[] {
+  const blocks: TextBlock[] = [];
+  let currentOffset = 0;
+  
+  const containerTag = container.tagName.toLowerCase();
+  if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'figcaption', 'li'].includes(containerTag)) {
+    const text = container.innerText?.trim();
+    if (text && text.length >= 10) {
+      return [{ text, element: container, startOffset: 0 }];
+    }
+  }
+  
+  for (const el of container.querySelectorAll<HTMLElement>('p, h1, h2, h3, h4, h5, h6, blockquote, figcaption, li')) {
+    if (el.offsetParent === null) continue;
+    if (el.closest('nav, footer, aside, script, style')) continue;
+    if (isNavigationElement(el, el.innerText)) continue;
+    
+    const text = el.innerText?.trim();
+    if (!text || text.length < 10) continue;
+    
+    blocks.push({ text, element: el, startOffset: currentOffset });
+    currentOffset += text.length + 2;
+  }
+  
+  return blocks;
+}
+
+function updateSelectionButtonState(): void {
+  if (!selectBtn) return;
+  
+  if (isSelectionModeActive) {
+    selectBtn.classList.add('riddi-ctrl-btn--active');
+    selectBtn.title = 'Cancel selection (Esc)';
+  } else {
+    selectBtn.classList.remove('riddi-ctrl-btn--active');
+    selectBtn.title = 'Select text block (Ctrl+Shift+S)';
   }
 }
 
@@ -478,6 +751,9 @@ function handleRuntimeMessage(message: BackgroundToContentMessage): void {
     case 'widget-visibility':
       settings.widgetEnabled = message.enabled;
       updateWidgetVisibility();
+      break;
+    case 'toggle-selection-mode':
+      toggleSelectionMode();
       break;
   }
 }
@@ -586,6 +862,13 @@ function handleShortcuts(event: KeyboardEvent): void {
     event.stopPropagation();
     void notifyBackground({ type: 'stop-tts' });
     resetHighlightTracking();
+    return;
+  }
+
+  if (event.code === 'KeyS') {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSelectionMode();
   }
 }
 
@@ -695,6 +978,37 @@ function injectStyles(): void {
     #${WIDGET_ID} .riddi-ctrl-btn--stop:hover:not(:disabled) {
       background: rgba(239, 68, 68, 0.3);
       color: #ef4444;
+    }
+    
+    #${WIDGET_ID} .riddi-ctrl-btn--select {
+      color: #FFE8D2;
+      font-size: 23px;
+    }
+    #${WIDGET_ID} .riddi-ctrl-btn--select:hover:not(:disabled) {
+      background: rgba(244, 124, 38, 0.3);
+      color: #F47C26;
+    }
+    #${WIDGET_ID} .riddi-ctrl-btn--select.riddi-ctrl-btn--active {
+      background: rgba(244, 124, 38, 0.5);
+      color: #F47C26;
+      box-shadow: 0 0 0 2px rgba(244, 124, 38, 0.3);
+    }
+    
+    /* Selection Mode Styles */
+    .${SELECTION_MODE_CLASS} {
+      cursor: crosshair !important;
+    }
+    
+    .${SELECTION_MODE_CLASS} * {
+      cursor: crosshair !important;
+    }
+    
+    .${SELECTION_HOVER_CLASS} {
+      outline: 2px solid rgba(244, 124, 38, 0.8) !important;
+      outline-offset: 2px !important;
+      background-color: rgba(244, 124, 38, 0.1) !important;
+      transition: outline 100ms ease, background-color 100ms ease !important;
+      border-radius: 4px !important;
     }
     
     .${HIGHLIGHT_CLASS} {
