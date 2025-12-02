@@ -15,7 +15,7 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 - **Learning** – listen to educational content hands-free
 - **Reducing eye strain** – give your eyes a break
 
-[<img width="848" height="476" alt="image" src="https://github.com/user-attachments/assets/d1d94738-3fc0-4741-b222-ffce5426a4ca" />](https://www.youtube.com/watch?v=J2JbKLt9PP4)
+[<img width="848" height="476" alt="Riddi youtube showcase" src="https://github.com/user-attachments/assets/d1d94738-3fc0-4741-b222-ffce5426a4ca" />](https://www.youtube.com/watch?v=J2JbKLt9PP4)
 
 
 ## Features
@@ -43,9 +43,10 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 ### Floating Widget
 - Unobtrusive player that stays in the corner
 - Expand for playback controls
-- Can be disabled in settings (use popup instead)
+- Can be disabled in settings (use pop-up instead)
 
-<img alt="image" src="https://github.com/user-attachments/assets/eee4b494-c62e-4908-86ef-c1f0bb683b95" />
+<img alt="Riddi screenshot" src="https://github.com/user-attachments/assets/3f03e28e-7f96-45cb-9a29-31324be24dd2" />
+
 
 
 
@@ -64,7 +65,7 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 4. Press `Escape` to cancel selection mode
 
 ### Settings (Popup)
-Click the Riddi icon in Chrome toolbar to access:
+Click the Riddi icon in the Chrome toolbar to access:
 - **Voice** – Choose between M1, M2, F1, F2
 - **Speed** – Adjust playback rate
 - **Quality Steps** – Higher = better quality, slower generation
@@ -149,5 +150,5 @@ public/assets/
 
 - TTS models are bundled (~60MB) under `public/assets/onnx/`
 - First synthesis may take a few seconds while models load
-- WebGPU provides best performance; falls back to WASM if unavailable
-- Works best on article-style pages with clear content structure
+- WebGPU provides the best performance; falls back to WASM if unavailable
+- Works best on article-style pages with a clear content structure
