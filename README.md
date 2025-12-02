@@ -82,11 +82,20 @@ Click the Riddi icon in Chrome toolbar to access:
 ## Local Development
 
 ### Prerequisites
-- Node.js 18+
+- Git LFS
+- Node.js 22+
 - npm or pnpm
 
 ### Setup
 ```bash
+#If you don't have Git LFS installed
+#mac
+brew install git-lfs
+#linux
+sudo apt-get install git-lfs
+#windows
+git lfs install
+
 # Clone the repository
 git clone https://github.com/pmbstyle/Riddi.git
 cd riddi
