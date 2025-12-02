@@ -140,9 +140,9 @@ public/assets/
 ### Tech Stack
 - **Vite** + **CRXJS** – Extension bundling
 - **Vue 3** – Popup UI
-- **TypeScript** – Type safety throughout
 - **ONNX Runtime Web** – Neural network inference
-- **Readability.js** – Content extraction
+- [**Supertonic**](https://github.com/supertone-inc/supertonic) – Lightweight TTS model
+- [**Readability.js**](https://github.com/mozilla/readability) – Content extraction
 
 ---
 
