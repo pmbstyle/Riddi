@@ -8,6 +8,13 @@ const STYLES_ID = 'tts-reader-styles';
 const SELECTION_MODE_CLASS = 'riddi-selection-mode-active';
 const SELECTION_HOVER_CLASS = 'riddi-selection-hover';
 
+// SVG Icons
+const ICON_SELECT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`;
+const ICON_PLAY = `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>`;
+const ICON_PAUSE = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>`;
+const ICON_STOP = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`;
+const ICON_LOADING = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`;
+
 let settings: TTSSettings = {
   voice: 'M1',
   speed: 1.0,
@@ -419,7 +426,7 @@ function injectWidget(): void {
 
   selectBtn = document.createElement('button');
   selectBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--select';
-  selectBtn.innerHTML = '⌖';
+  selectBtn.innerHTML = ICON_SELECT;
   selectBtn.title = 'Select text block (Ctrl+Shift+S)';
   selectBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -428,7 +435,7 @@ function injectWidget(): void {
 
   playBtn = document.createElement('button');
   playBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--play';
-  playBtn.innerHTML = '▶';
+  playBtn.innerHTML = ICON_PLAY;
   playBtn.title = 'Play';
   playBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -437,7 +444,7 @@ function injectWidget(): void {
 
   pauseBtn = document.createElement('button');
   pauseBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--pause';
-  pauseBtn.innerHTML = '⏸';
+  pauseBtn.innerHTML = ICON_PAUSE;
   pauseBtn.title = 'Pause';
   pauseBtn.style.display = 'none';
   pauseBtn.addEventListener('click', (e) => {
@@ -447,7 +454,7 @@ function injectWidget(): void {
 
   stopBtn = document.createElement('button');
   stopBtn.className = 'riddi-ctrl-btn riddi-ctrl-btn--stop';
-  stopBtn.innerHTML = '⏹';
+  stopBtn.innerHTML = ICON_STOP;
   stopBtn.title = 'Stop';
   stopBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -779,15 +786,17 @@ function updateWidgetState(): void {
     pauseBtn.style.display = 'none';
     
     if (status === 'paused') {
-      playBtn.innerHTML = '▶';
+      playBtn.innerHTML = ICON_PLAY;
       playBtn.title = 'Resume';
       playBtn.disabled = false;
     } else if (status === 'loading') {
-      playBtn.innerHTML = '⏳';
+      playBtn.innerHTML = ICON_LOADING;
+      playBtn.classList.add('riddi-ctrl-btn--loading');
       playBtn.title = 'Loading...';
       playBtn.disabled = true;
     } else {
-      playBtn.innerHTML = '▶';
+      playBtn.innerHTML = ICON_PLAY;
+      playBtn.classList.remove('riddi-ctrl-btn--loading');
       playBtn.title = 'Play';
       playBtn.disabled = false;
     }
@@ -954,8 +963,18 @@ function injectStyles(): void {
       border: none;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 12px;
       transition: all 100ms ease;
+    }
+    #${WIDGET_ID} .riddi-ctrl-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+    #${WIDGET_ID} .riddi-ctrl-btn--loading svg {
+      animation: riddi-spin 1s linear infinite;
+    }
+    @keyframes riddi-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
     #${WIDGET_ID} .riddi-ctrl-btn:hover:not(:disabled) {
       background: rgba(244, 124, 38, 0.3);
@@ -982,7 +1001,6 @@ function injectStyles(): void {
     
     #${WIDGET_ID} .riddi-ctrl-btn--select {
       color: #FFE8D2;
-      font-size: 23px;
     }
     #${WIDGET_ID} .riddi-ctrl-btn--select:hover:not(:disabled) {
       background: rgba(244, 124, 38, 0.3);

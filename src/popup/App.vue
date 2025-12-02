@@ -19,30 +19,46 @@
           title="Select text block to read (Ctrl+Shift+S)"
           @click="handleSelectMode"
         >
-          <span class="btn__icon">⌖</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
+          </svg>
         </button>
         <button
           v-if="playbackState.status !== 'playing'"
           class="btn btn--play"
           :disabled="!hasArticle || playbackState.status === 'loading'"
+          :class="{ 'btn--loading': playbackState.status === 'loading' }"
           @click="handlePlayPause"
         >
-          <span v-if="playbackState.status === 'loading'" class="btn__icon">⏳</span>
-          <span v-else class="btn__icon">▶</span>
+          <svg v-if="playbackState.status === 'loading'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6,4 20,12 6,20"/>
+          </svg>
         </button>
         <button
           v-else
           class="btn btn--pause"
           @click="handlePlayPause"
         >
-          <span class="btn__icon">⏸</span>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="4" width="5" height="16" rx="1"/>
+            <rect x="14" y="4" width="5" height="16" rx="1"/>
+          </svg>
         </button>
         <button
           class="btn btn--stop"
           :disabled="playbackState.status === 'idle'"
           @click="handleStop"
         >
-          <span class="btn__icon">⏹</span>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="5" width="14" height="14" rx="2"/>
+          </svg>
         </button>
       </div>
       <div class="playback-status">
@@ -276,11 +292,21 @@ watch(
   background: rgba(255, 255, 255, 0.1);
   color: #FFE8D2;
   width: 50px;
-  font-size: 42px;
 }
 .btn--select:hover:not(:disabled) {
   background: rgba(244, 124, 38, 0.4);
   color: #F47C26;
+}
+.btn svg {
+  width: 24px;
+  height: 24px;
+}
+.btn--loading svg {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 .btn--stop {
   background: rgba(255, 255, 255, 0.1);
@@ -290,9 +316,6 @@ watch(
 .btn--stop:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.8);
   color: white;
-}
-.btn__icon {
-  line-height: 1;
 }
 .playback-status {
   display: flex;
