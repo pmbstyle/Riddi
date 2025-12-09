@@ -2,9 +2,13 @@
 <img src="./riddi-logo.png" width="250">
 </p>
 
+![Chrome Web Store Version](https://img.shields.io/chrome-web-store/v/elghlgcjihgpmmffcmphbddmkgbfdbbg) 
+
 # Riddi – Local Text-to-Speech Browser Reader
 
 A Chrome extension that converts web articles to speech using built-in local AI models. No cloud services, no API keys – everything runs directly in your browser.
+
+👉 [Download from Chrome Web Store](https://chromewebstore.google.com/detail/riddi/elghlgcjihgpmmffcmphbddmkgbfdbbg)
 
 ## What is Riddi?
 
