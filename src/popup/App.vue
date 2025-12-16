@@ -114,8 +114,14 @@ import type { PlaybackState, TTSSettings } from '@shared/types';
 const voices = [
   { id: 'M1', label: 'Male 1 (M1)' },
   { id: 'M2', label: 'Male 2 (M2)' },
+  { id: 'M3', label: 'Male 3 (M2)' },
+  { id: 'M4', label: 'Male 4 (M2)' },
+  { id: 'M5', label: 'Male 5 (M2)' },
   { id: 'F1', label: 'Female 1 (F1)' },
-  { id: 'F2', label: 'Female 2 (F2)' }
+  { id: 'F2', label: 'Female 2 (F2)' },
+  { id: 'F3', label: 'Female 3 (F3)' },
+  { id: 'F4', label: 'Female 4 (F4)' },
+  { id: 'F5', label: 'Female 5 (F5)' }
 ];
 
 const settings = reactive<TTSSettings>({

@@ -1,4 +1,4 @@
-export type VoiceId = 'M1' | 'M2' | 'F1' | 'F2';
+export type VoiceId = 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'F1' | 'F2' | 'F3' | 'F4' | 'F5';
 
 export interface TTSSettings {
   voice: VoiceId;
