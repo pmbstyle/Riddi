@@ -40,7 +40,7 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 - Smooth auto-scroll to keep content in view
 
 ### Multiple Voices
-- 4 built-in voice styles (2 male, 2 female)
+- 10 built-in voice styles (5 male, 5 female)
 - Adjustable speech speed (0.5x – 2x)
 - Quality/speed tradeoff via denoising steps
 
@@ -70,7 +70,7 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 
 ### Settings (Popup)
 Click the Riddi icon in the Chrome toolbar to access:
-- **Voice** – Choose between M1, M2, F1, F2
+- **Voice** – Choose between M1-5, F1-5
 - **Speed** – Adjust playback rate
 - **Quality Steps** – Higher = better quality, slower generation
 - **Widget Toggle** – Show/hide the floating widget
