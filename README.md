@@ -40,7 +40,7 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 - Smooth auto-scroll to keep content in view
 
 ### Multiple Voices
-- 4 built-in voice styles (5 male, 5 female)
+- 10 built-in voice styles (5 male, 5 female)
 - Adjustable speech speed (0.5x – 2x)
 - Quality/speed tradeoff via denoising steps
 
