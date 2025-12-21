@@ -6,7 +6,7 @@ import path from 'path';
 const manifest = defineManifest({
   manifest_version: 3,
   name: 'Riddi',
-  version: '0.0.1',
+  version: '0.0.2',
   description: 'Listen to cleaned article text with local TTS, sentence highlighting, and a floating player.',
   content_security_policy: {
     extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
