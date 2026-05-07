@@ -2,6 +2,12 @@ import { Readability } from '@mozilla/readability';
 import { highlightChunk, resetHighlightTracking, pauseWordAnimation, HIGHLIGHT_CLASS, setArticleElements as setHighlightElements } from './highlight';
 import type { BackgroundToContentMessage, ContentToBackgroundMessage } from '@shared/messages';
 import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
+import {
+  DEFAULT_SUPERTONIC_LANGUAGE,
+  normalizeLanguageCode,
+  resolveLanguageSetting,
+  type SupportedLanguage
+} from '@shared/languages';
 
 const WIDGET_ID = 'riddi-widget';
 const STYLES_ID = 'tts-reader-styles';
@@ -17,6 +23,7 @@ const ICON_LOADING = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 
 let settings: TTSSettings = {
   voice: 'M1',
+  language: 'auto',
   speed: 1.0,
   qualitySteps: 6,
   widgetEnabled: true
@@ -64,7 +71,7 @@ async function init(): Promise<void> {
     }
   });
   
-  article = extractArticle();
+  article = await extractArticleWithLanguage();
   if (article) {
     await notifyBackground({ type: 'content-ready', article });
   }
@@ -158,7 +165,7 @@ function handleNavigation(): void {
     ensureWidgetExists();
     updateWidgetState();
     
-    const newArticle = extractArticle();
+    const newArticle = await extractArticleWithLanguage();
     if (newArticle) {
       article = newArticle;
       await notifyBackground({ type: 'content-ready', article });
@@ -182,6 +189,11 @@ function ensureWidgetExists(): void {
     isWidgetExpanded = false;
     injectWidget();
   }
+}
+
+async function extractArticleWithLanguage(sourceElement?: HTMLElement): Promise<ArticleContent | null> {
+  const extracted = sourceElement ? extractArticleFromElement(sourceElement) : extractArticle();
+  return extracted ? enrichArticleLanguage(extracted, sourceElement) : null;
 }
 
 function extractArticle(): ArticleContent | null {
@@ -562,6 +574,10 @@ function handleSelectionMouseMove(event: MouseEvent): void {
 }
 
 function handleSelectionClick(event: MouseEvent): void {
+  void handleSelectionClickAsync(event);
+}
+
+async function handleSelectionClickAsync(event: MouseEvent): Promise<void> {
   if (!isSelectionModeActive) return;
   
   const target = event.target as HTMLElement;
@@ -575,7 +591,7 @@ function handleSelectionClick(event: MouseEvent): void {
   const selectableElement = findSelectableElement(target);
   
   if (selectableElement) {
-    const extractedArticle = extractArticleFromElement(selectableElement);
+    const extractedArticle = await extractArticleWithLanguage(selectableElement);
     
     if (extractedArticle && extractedArticle.content.trim().length > 10) {
       // Update the article with selected content
@@ -816,6 +832,7 @@ async function startPlayback(): Promise<void> {
   const request: TTSRequest = {
     requestId: crypto.randomUUID(),
     text: article.content,
+    language: resolveLanguageSetting(settings.language, article.language?.code),
     settings
   };
   
@@ -839,6 +856,87 @@ async function loadSettings(): Promise<void> {
   const saved = await chrome.storage.sync.get(['ttsSettings']);
   if (saved?.ttsSettings) {
     settings = { ...settings, ...(saved.ttsSettings as Partial<TTSSettings>) };
+  }
+}
+
+async function enrichArticleLanguage(
+  extractedArticle: ArticleContent,
+  sourceElement?: HTMLElement
+): Promise<ArticleContent> {
+  const markupLanguage = detectMarkupLanguage(sourceElement);
+  const textLanguage = await detectTextLanguage(extractedArticle.content);
+
+  if (
+    textLanguage &&
+    (!markupLanguage ||
+      textLanguage.code === markupLanguage.code ||
+      textLanguage.isReliable ||
+      (textLanguage.confidence ?? 0) >= 70)
+  ) {
+    return { ...extractedArticle, language: textLanguage };
+  }
+
+  return {
+    ...extractedArticle,
+    language:
+      markupLanguage ??
+      textLanguage ?? {
+        code: DEFAULT_SUPERTONIC_LANGUAGE,
+        source: 'fallback'
+      }
+  };
+}
+
+function detectMarkupLanguage(sourceElement?: HTMLElement): ArticleContent['language'] | null {
+  const closestLang = sourceElement?.closest<HTMLElement>('[lang]')?.getAttribute('lang');
+  const documentLang = document.documentElement.getAttribute('lang');
+  const contentLanguage = document.querySelector<HTMLMetaElement>('meta[http-equiv="content-language" i]')?.content;
+  const ogLocale = document.querySelector<HTMLMetaElement>('meta[property="og:locale" i]')?.content;
+
+  const candidates: Array<{ raw: string | null | undefined; source: 'document' | 'metadata' }> = [
+    { raw: closestLang, source: 'document' },
+    { raw: documentLang, source: 'document' },
+    { raw: contentLanguage, source: 'metadata' },
+    { raw: ogLocale, source: 'metadata' }
+  ];
+
+  for (const candidate of candidates) {
+    const code = normalizeLanguageCode(candidate.raw);
+    if (code) {
+      return { code, source: candidate.source, raw: candidate.raw ?? undefined };
+    }
+  }
+
+  return null;
+}
+
+async function detectTextLanguage(text: string): Promise<ArticleContent['language'] | null> {
+  const sample = text.replace(/\s+/g, ' ').trim().slice(0, 3000);
+  if (sample.length < 20) return null;
+
+  try {
+    const result = await chrome.i18n.detectLanguage(sample);
+    const best = result.languages
+      .map((language) => ({
+        raw: language.language,
+        code: normalizeLanguageCode(language.language),
+        confidence: language.percentage
+      }))
+      .filter((language): language is { raw: string; code: SupportedLanguage; confidence: number } => !!language.code)
+      .sort((a, b) => b.confidence - a.confidence)[0];
+
+    if (!best) return null;
+
+    return {
+      code: best.code,
+      source: 'text',
+      confidence: best.confidence,
+      isReliable: result.isReliable,
+      raw: best.raw
+    };
+  } catch (error) {
+    console.warn('[Riddi] Language detection failed', error);
+    return null;
   }
 }
 

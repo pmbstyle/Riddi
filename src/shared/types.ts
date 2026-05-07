@@ -1,7 +1,10 @@
+import type { LanguageSetting, SupportedLanguage } from './languages';
+
 export type VoiceId = 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'F1' | 'F2' | 'F3' | 'F4' | 'F5';
 
 export interface TTSSettings {
   voice: VoiceId;
+  language: LanguageSetting;
   speed: number; // 0.5 - 2.0
   qualitySteps: number; // denoising steps (1-10+)
   widgetEnabled: boolean;
@@ -24,11 +27,19 @@ export interface ArticleContent {
   byline?: string;
   content: string;
   sentences: string[];
+  language?: {
+    code: SupportedLanguage;
+    source: 'document' | 'metadata' | 'text' | 'fallback';
+    confidence?: number;
+    isReliable?: boolean;
+    raw?: string;
+  };
 }
 
 export interface TTSRequest {
   requestId: string;
   text: string;
+  language: SupportedLanguage;
   settings: TTSSettings;
 }
 
