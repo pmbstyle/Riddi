@@ -39,7 +39,10 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 - Word-by-word highlighting synced with speech
 - Smooth auto-scroll to keep content in view
 
-### Multiple Voices
+### Multilingual Speech
+- Uses Supertonic 3 with local support for 31 languages
+- Detects article language automatically from page metadata and extracted text
+- Manual language override is available in the popup
 - 10 built-in voice styles (5 male, 5 female)
 - Adjustable speech speed (0.5x – 2x)
 - Quality/speed tradeoff via denoising steps
@@ -71,6 +74,7 @@ Riddi extracts readable content from web pages and synthesizes natural-sounding 
 ### Settings (Popup)
 Click the Riddi icon in the Chrome toolbar to access:
 - **Voice** – Choose between M1-5, F1-5
+- **Language** – Auto-detect from the page or choose a specific language
 - **Speed** – Adjust playback rate
 - **Quality Steps** – Higher = better quality, slower generation
 - **Widget Toggle** – Show/hide the floating widget
@@ -145,14 +149,14 @@ public/assets/
 - **Vite** + **CRXJS** – Extension bundling
 - **Vue 3** – Popup UI
 - **ONNX Runtime Web** – Neural network inference
-- [**Supertonic**](https://github.com/supertone-inc/supertonic) – Lightweight TTS model
+- [**Supertonic 3**](https://github.com/supertone-inc/supertonic) – Lightweight multilingual TTS model
 - [**Readability.js**](https://github.com/mozilla/readability) – Content extraction
 
 ---
 
 ## Notes
 
-- TTS models are bundled (~60MB) under `public/assets/onnx/`
+- TTS models are bundled under `public/assets/onnx/`
 - First synthesis may take a few seconds while models load
 - WebGPU provides the best performance; falls back to WASM if unavailable
 - Works best on article-style pages with a clear content structure
