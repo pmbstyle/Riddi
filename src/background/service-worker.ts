@@ -7,6 +7,7 @@ import type {
 } from '@shared/messages';
 import { isContentMessage, isOffscreenMessage, isPopupMessage } from '@shared/messages';
 import type { ArticleContent, PlaybackState, TTSRequest, TTSSettings } from '@shared/types';
+import { resolveLanguageSetting } from '@shared/languages';
 
 const OFFSCREEN_DOCUMENT_PATH = 'src/offscreen/offscreen.html';
 let offscreenReady = false;
@@ -113,6 +114,7 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
         const saved = await chrome.storage.sync.get(['ttsSettings']);
         const settings: TTSSettings = saved?.ttsSettings ?? {
           voice: 'M1',
+          language: 'auto',
           speed: 1,
           qualitySteps: 6,
           widgetEnabled: true
@@ -132,7 +134,12 @@ async function handlePopupMessage(message: PopupToBackgroundMessage, sendRespons
         });
         await postToOffscreen({
           type: 'synthesize',
-          payload: { requestId, text: result.article.content, settings }
+          payload: {
+            requestId,
+            text: result.article.content,
+            language: resolveLanguageSetting(settings.language, result.article.language?.code),
+            settings
+          }
         });
       }
       sendResponse({ ok: true });

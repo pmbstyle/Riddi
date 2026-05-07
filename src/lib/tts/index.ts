@@ -1,4 +1,9 @@
 import * as ort from 'onnxruntime-web';
+import {
+  SUPERTONIC_LANGUAGES,
+  isSupportedLanguage,
+  type SupportedLanguage
+} from '@shared/languages';
 
 export interface TTSConfig {
   ae: {
@@ -21,8 +26,8 @@ export type ChunkReadyCallback = (chunkIndex: number, totalChunks: number, wav: 
 export class UnicodeProcessor {
   constructor(private readonly indexer: number[]) {}
 
-  call(textList: string[]): { textIds: number[][]; textMask: number[][][] } {
-    const processedTexts = textList.map((text) => this.preprocessText(text));
+  call(textList: string[], langList: SupportedLanguage[]): { textIds: number[][]; textMask: number[][][] } {
+    const processedTexts = textList.map((text, i) => this.preprocessText(text, langList[i]));
 
     const textIdsLengths = processedTexts.map((text) => text.length);
     const maxLen = Math.max(...textIdsLengths);
@@ -40,7 +45,7 @@ export class UnicodeProcessor {
     return { textIds, textMask };
   }
 
-  preprocessText(text: string): string {
+  preprocessText(text: string, language: SupportedLanguage): string {
     let normalized = text.normalize('NFKD');
 
     const emojiPattern =
@@ -104,7 +109,11 @@ export class UnicodeProcessor {
       normalized += '.';
     }
 
-    return normalized;
+    if (!isSupportedLanguage(language)) {
+      throw new Error(`Unsupported language: ${language}. Available: ${SUPERTONIC_LANGUAGES.join(', ')}`);
+    }
+
+    return `<${language}>${normalized}</${language}>`;
   }
 
   getTextMask(textIdsLengths: number[]): number[][][] {
@@ -152,8 +161,8 @@ export class TextToSpeech {
   /**
    * Split text into chunks for TTS processing
    */
-  getChunks(text: string): string[] {
-    return chunkText(text);
+  getChunks(text: string, language: SupportedLanguage = 'en'): string[] {
+    return chunkText(text, language);
   }
 
   /**
@@ -161,13 +170,14 @@ export class TextToSpeech {
    */
   async synthesizeChunk(
     chunkText: string,
+    language: SupportedLanguage,
     style: Style,
     totalStep: number,
     speed = 1.05,
     progressCallback: StepProgressCallback | null = null
   ): Promise<{ wav: number[]; duration: number }> {
     this.log('synthesize-single-chunk', { textLength: chunkText.length });
-    const { wav, duration } = await this._infer([chunkText], style, totalStep, speed, progressCallback);
+    const { wav, duration } = await this._infer([chunkText], [language], style, totalStep, speed, progressCallback);
     return { wav, duration: duration[0] };
   }
 
@@ -177,6 +187,7 @@ export class TextToSpeech {
    */
   async synthesizeStreaming(
     text: string,
+    language: SupportedLanguage,
     style: Style,
     totalStep: number,
     speed = 1.05,
@@ -186,7 +197,8 @@ export class TextToSpeech {
     if (style.ttl.dims[0] !== 1) {
       throw new Error('Single speaker text to speech only supports single style');
     }
-    const textList = chunkText(text);
+    const textList = chunkText(text, language);
+    const langList = new Array<SupportedLanguage>(textList.length).fill(language);
     this.log('tts-chunks', { totalChunks: textList.length, chunkLengths: textList.map(c => c.length) });
     
     let totalDuration = 0;
@@ -201,7 +213,7 @@ export class TextToSpeech {
       }
       
       try {
-        const { wav, duration } = await this._infer([chunk], style, totalStep, speed, progressCallback);
+        const { wav, duration } = await this._infer([chunk], [langList[i]], style, totalStep, speed, progressCallback);
         const chunkDuration = duration[0];
         this.log('chunk-complete', { chunkIndex: i, wavLength: wav.length, duration: chunkDuration });
 
@@ -225,6 +237,7 @@ export class TextToSpeech {
    */
   async call(
     text: string,
+    language: SupportedLanguage,
     style: Style,
     totalStep: number,
     speed = 1.05,
@@ -237,6 +250,7 @@ export class TextToSpeech {
 
     await this.synthesizeStreaming(
       text,
+      language,
       style,
       totalStep,
       speed,
@@ -277,16 +291,18 @@ export class TextToSpeech {
 
   async batch(
     textList: string[],
+    langList: SupportedLanguage[],
     style: Style,
     totalStep: number,
     speed = 1.05,
     progressCallback: StepProgressCallback | null = null
   ): Promise<{ wav: number[]; duration: number[] }> {
-    return this._infer(textList, style, totalStep, speed, progressCallback);
+    return this._infer(textList, langList, style, totalStep, speed, progressCallback);
   }
 
   private async _infer(
     textList: string[],
+    langList: SupportedLanguage[],
     style: Style,
     totalStep: number,
     speed: number,
@@ -296,7 +312,7 @@ export class TextToSpeech {
 
     this.log('infer-start', { bsz, textLengths: textList.map(t => t.length) });
 
-    const { textIds, textMask } = this.textProcessor.call(textList);
+    const { textIds, textMask } = this.textProcessor.call(textList, langList);
     this.log('text-processed', { textIdsShape: [bsz, textIds[0]?.length], textMaskShape: [bsz, 1, textMask[0]?.[0]?.length] });
 
     const textIdsFlat = new BigInt64Array(textIds.flat().map((x) => BigInt(x)));
@@ -606,10 +622,12 @@ export async function loadTextToSpeech(
   return { textToSpeech, cfgs };
 }
 
-export function chunkText(text: string, maxLen = 300): string[] {
+export function chunkText(text: string, language: SupportedLanguage = 'en', maxLen?: number): string[] {
   if (typeof text !== 'string') {
     throw new Error(`chunkText expects a string, got ${typeof text}`);
   }
+
+  const effectiveMaxLen = maxLen ?? (language === 'ko' || language === 'ja' ? 120 : 300);
 
   // Split by double newlines to get paragraphs (each paragraph = one DOM block)
   const paragraphs = text.trim().split(/\n\s*\n+/).filter((p) => p.trim());
@@ -622,7 +640,7 @@ export function chunkText(text: string, maxLen = 300): string[] {
 
     // Short paragraphs (likely headings or short content) - keep as single chunk
     // This ensures headings are read separately from the following paragraph
-    if (paragraph.length <= maxLen) {
+    if (paragraph.length <= effectiveMaxLen) {
       chunks.push(paragraph);
       continue;
     }
@@ -635,7 +653,7 @@ export function chunkText(text: string, maxLen = 300): string[] {
     let currentChunk = '';
 
     for (const sentence of sentences) {
-      if (currentChunk.length + sentence.length + 1 <= maxLen) {
+      if (currentChunk.length + sentence.length + 1 <= effectiveMaxLen) {
         currentChunk += (currentChunk ? ' ' : '') + sentence;
       } else {
         if (currentChunk) {

@@ -80,6 +80,16 @@
       </label>
 
       <label class="field">
+        <span>Language</span>
+        <select v-model="settings.language">
+          <option value="auto">Auto detect</option>
+          <option v-for="language in languages" :key="language.code" :value="language.code">
+            {{ language.label }}
+          </option>
+        </select>
+      </label>
+
+      <label class="field">
         <span>Speed: {{ settings.speed.toFixed(2) }}x</span>
         <input v-model.number="settings.speed" type="range" min="0.5" max="2" step="0.05" />
       </label>
@@ -110,6 +120,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import type { PlaybackState, TTSSettings } from '@shared/types';
+import { SUPERTONIC_LANGUAGES, SUPERTONIC_LANGUAGE_LABELS } from '@shared/languages';
 
 const voices = [
   { id: 'M1', label: 'Male 1 (M1)' },
@@ -126,10 +137,16 @@ const voices = [
 
 const settings = reactive<TTSSettings>({
   voice: 'M1',
+  language: 'auto',
   speed: 1,
   qualitySteps: 6,
   widgetEnabled: true
 });
+
+const languages = SUPERTONIC_LANGUAGES.map((code) => ({
+  code,
+  label: `${SUPERTONIC_LANGUAGE_LABELS[code]} (${code})`
+}));
 
 const playbackState = reactive<PlaybackState>({
   status: 'idle',

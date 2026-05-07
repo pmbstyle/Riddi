@@ -96,7 +96,7 @@ async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
     let totalDuration = 0;
 
     // Get text chunks
-    const textChunks = textToSpeech!.getChunks(request.text);
+    const textChunks = textToSpeech!.getChunks(request.text, request.language);
     const totalChunks = textChunks.length;
     await debug('text-chunks', { totalChunks, lengths: textChunks.map(c => c.length) });
 
@@ -135,6 +135,7 @@ async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
       
       const { wav, duration } = await textToSpeech!.synthesizeChunk(
         chunkText,
+        request.language,
         style,
         request.settings.qualitySteps,
         request.settings.speed,
