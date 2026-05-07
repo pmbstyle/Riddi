@@ -1,12 +1,6 @@
 {
-    "tts_version": "v1.5.0",
-    "split": "opensource-en",
-    "ttl_ckpt_path": "unknown.pt",
-    "dp_ckpt_path": "unknown.pt",
-    "ae_ckpt_path": "unknown.pt",
-    "ttl_train": "unknown",
-    "dp_train": "unknown",
-    "ae_train": "unknown",
+    "tts_version": "v1.7.3",
+    "split": "opensource-multilingual",
     "ttl": {
         "latent_dim": 24,
         "chunk_compress_factor": 6,
@@ -17,9 +11,9 @@
             "scale": 0.25
         },
         "text_encoder": {
-            "char_dict_path": "resources/metadata/char_dict/opensource-en/char_dict.json",
+            "n_langs": 0,
+            "lang_emb_dim": 0,
             "text_embedder": {
-                "char_dict_path": "resources/metadata/char_dict/opensource-en/char_dict.json",
                 "char_emb_dim": 256
             },
             "convnext": {
@@ -30,10 +24,10 @@
                 "dilation_lst": [
                     1,
                     1,
-                    1,
-                    1,
-                    1,
-                    1
+                    2,
+                    2,
+                    4,
+                    4
                 ]
             },
             "attn_encoder": {
@@ -49,7 +43,7 @@
             }
         },
         "flow_matching": {
-            "sig_min": 0
+            "sig_min": 1e-08
         },
         "style_encoder": {
             "proj_in": {
@@ -97,6 +91,8 @@
             "style_value_dim": 256
         },
         "vector_field": {
+            "n_langs": 0,
+            "lang_emb_dim": 0,
             "proj_in": {
                 "ldim": 24,
                 "chunk_compress_factor": 6,
@@ -119,7 +115,8 @@
                 "text_cond_layer": {
                     "idim": 512,
                     "text_dim": 256,
-                    "n_heads": 4,
+                    "n_heads": 8,
+                    "n_units": 512,
                     "use_residual": true,
                     "rotary_base": 10000,
                     "rotary_scale": 10
@@ -127,7 +124,7 @@
                 "convnext_0": {
                     "idim": 512,
                     "ksz": 5,
-                    "intermediate_dim": 1024,
+                    "intermediate_dim": 2048,
                     "num_layers": 4,
                     "dilation_lst": [
                         1,
@@ -139,7 +136,7 @@
                 "convnext_1": {
                     "idim": 512,
                     "ksz": 5,
-                    "intermediate_dim": 1024,
+                    "intermediate_dim": 2048,
                     "num_layers": 1,
                     "dilation_lst": [
                         1
@@ -148,7 +145,7 @@
                 "convnext_2": {
                     "idim": 512,
                     "ksz": 5,
-                    "intermediate_dim": 1024,
+                    "intermediate_dim": 2048,
                     "num_layers": 1,
                     "dilation_lst": [
                         1
@@ -158,7 +155,7 @@
             "last_convnext": {
                 "idim": 512,
                 "ksz": 5,
-                "intermediate_dim": 1024,
+                "intermediate_dim": 2048,
                 "num_layers": 4,
                 "dilation_lst": [
                     1,
@@ -246,9 +243,7 @@
         },
         "sentence_encoder": {
             "char_emb_dim": 64,
-            "char_dict_path": "resources/metadata/char_dict/opensource-en/char_dict.json",
             "text_embedder": {
-                "char_dict_path": "resources/metadata/char_dict/opensource-en/char_dict.json",
                 "char_emb_dim": 64
             },
             "convnext": {
