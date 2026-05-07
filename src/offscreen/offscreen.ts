@@ -62,6 +62,9 @@ notifyBackground({ type: 'ready' }).catch((error) => console.error('Failed to no
 
 async function routeMessage(message: BackgroundToOffscreenMessage): Promise<void> {
   switch (message.type) {
+    case 'preload':
+      await preloadTextToSpeech(message.voice);
+      break;
     case 'synthesize':
       await synthesizeAndPlay(message.payload);
       break;
@@ -78,6 +81,13 @@ async function routeMessage(message: BackgroundToOffscreenMessage): Promise<void
     default:
       break;
   }
+}
+
+async function preloadTextToSpeech(voice: VoiceId): Promise<void> {
+  await debug('preload-start', { voice });
+  await ensureTextToSpeech();
+  await ensureVoiceStyle(voice);
+  await debug('preload-complete', { voice, backend: activeBackend });
 }
 
 async function synthesizeAndPlay(request: TTSRequest): Promise<void> {
