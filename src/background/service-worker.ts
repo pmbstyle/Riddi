@@ -26,6 +26,8 @@ let playbackState: PlaybackState = {
 };
 let activeRequestId: string | null = null;
 let activeTabId: number | null = null;
+let preloadTimer: ReturnType<typeof setTimeout> | null = null;
+let preloadInFlight = false;
 
 chrome.runtime.onInstalled.addListener(() => {
   console.info('[Riddi] Extension installed');
@@ -181,6 +183,7 @@ async function handleContentMessage(message: ContentToBackgroundMessage, tabId?:
       if (tabId) {
         tabArticles.set(tabId, message.article);
       }
+      scheduleTtsPreload();
       break;
     case 'start-tts':
       await ensureOffscreenReady();
@@ -210,6 +213,39 @@ async function handleContentMessage(message: ContentToBackgroundMessage, tabId?:
       activeTabId = null;
       updatePlaybackState({ status: 'idle', positionSeconds: 0, durationSeconds: 0 });
       break;
+  }
+}
+
+function scheduleTtsPreload(): void {
+  if (preloadTimer) {
+    clearTimeout(preloadTimer);
+  }
+
+  preloadTimer = setTimeout(() => {
+    preloadTimer = null;
+    void preloadTts();
+  }, 500);
+}
+
+async function preloadTts(): Promise<void> {
+  if (preloadInFlight) return;
+  preloadInFlight = true;
+
+  try {
+    const saved = await chrome.storage.sync.get(['ttsSettings']);
+    const settings: TTSSettings = saved?.ttsSettings ?? {
+      voice: 'M1',
+      language: 'auto',
+      speed: 1,
+      qualitySteps: 6,
+      widgetEnabled: true
+    };
+
+    await postToOffscreen({ type: 'preload', voice: settings.voice });
+  } catch (error) {
+    console.warn('[Riddi] TTS preload failed:', error);
+  } finally {
+    preloadInFlight = false;
   }
 }
 

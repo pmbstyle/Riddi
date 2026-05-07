@@ -3,7 +3,8 @@ import type {
   PlaybackState,
   TTSProgress,
   TTSRequest,
-  TTSResult
+  TTSResult,
+  VoiceId
 } from './types';
 
 export type ContentToBackgroundMessage =
@@ -29,6 +30,7 @@ export type BackgroundToContentMessage =
 
 export type BackgroundToOffscreenMessage =
   | { type: 'synthesize'; payload: TTSRequest }
+  | { type: 'preload'; voice: VoiceId }
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'stop' };
