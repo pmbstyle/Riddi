@@ -16,6 +16,8 @@ const VOICE_STYLE_DIR = chrome.runtime.getURL('assets/voice_styles');
 
 let audioContext: AudioContext | null = null;
 let textToSpeech: TextToSpeech | null = null;
+let textToSpeechLoadPromise: Promise<void> | null = null;
+let activeBackend: 'webgpu' | 'wasm' | null = null;
 let currentStyle: Style | null = null;
 let currentVoice: VoiceId | null = null;
 let activeRequestId: string | null = null;
@@ -359,6 +361,21 @@ async function ensureAudioContext(): Promise<void> {
 
 async function ensureTextToSpeech(): Promise<void> {
   if (textToSpeech) return;
+  if (textToSpeechLoadPromise) {
+    await textToSpeechLoadPromise;
+    return;
+  }
+
+  textToSpeechLoadPromise = loadTextToSpeechBackend();
+  try {
+    await textToSpeechLoadPromise;
+  } finally {
+    textToSpeechLoadPromise = null;
+  }
+}
+
+async function loadTextToSpeechBackend(): Promise<void> {
+  if (textToSpeech) return;
 
   // Prefer single-threaded WASM (SharedArrayBuffer not guaranteed in offscreen).
   ort.env.wasm.numThreads = 1;
@@ -369,21 +386,36 @@ async function ensureTextToSpeech(): Promise<void> {
     'ort-wasm-simd-threaded.asyncify.wasm': wasmAsyncify
   };
 
-  const wasmResult = await loadTextToSpeech(
-    ONNX_DIR,
-    { executionProviders: ['wasm'], graphOptimizationLevel: 'all' },
-    (name, current, total) => {
-      void debug('model-loading', { name, current, total });
-    }
-  );
-  textToSpeech = wasmResult.textToSpeech;
+  const progress = (backend: 'webgpu' | 'wasm') => (name: string, current: number, total: number) => {
+    void debug('model-loading', { backend, name, current, total });
+  };
+
+  try {
+    await debug('tts-backend-probe', { backend: 'webgpu' });
+    const webgpuResult = await loadTextToSpeech(
+      ONNX_DIR,
+      { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' },
+      progress('webgpu')
+    );
+    textToSpeech = webgpuResult.textToSpeech;
+    activeBackend = 'webgpu';
+  } catch (error) {
+    await debug('tts-backend-fallback', { from: 'webgpu', to: 'wasm', error: String(error) }, 'warn');
+    const wasmResult = await loadTextToSpeech(
+      ONNX_DIR,
+      { executionProviders: ['wasm'], graphOptimizationLevel: 'all' },
+      progress('wasm')
+    );
+    textToSpeech = wasmResult.textToSpeech;
+    activeBackend = 'wasm';
+  }
   
   // Wire up debug callback to trace TTS pipeline
   textToSpeech.debugCallback = (message, detail) => {
     void debug(`tts:${message}`, detail);
   };
   
-  await debug('tts-loaded');
+  await debug('tts-loaded', { backend: activeBackend });
 }
 
 async function ensureVoiceStyle(voice: VoiceId): Promise<Style> {
