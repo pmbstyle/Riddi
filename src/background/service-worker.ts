@@ -355,14 +355,3 @@ async function broadcastToContent(message: BackgroundToContentMessage): Promise<
     chrome.tabs.sendMessage(tab.id, message).catch(() => {});
   }
 }
-
-chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'get-last-article') {
-    // Return article from active tab
-    getActiveTabArticle().then(result => {
-      sendResponse({ article: result?.article ?? null });
-    });
-    return true;
-  }
-  return false;
-});
